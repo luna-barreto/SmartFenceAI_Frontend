@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "SmartFence AI",
+    "slug": "smartfence-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo-icono.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "smartfence",
+    "splash": {
+      "image": "./assets/logo-icono.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "co.smartfence.ai",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo-icono.png",
+        "backgroundColor": "#173B1A"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "INTERNET",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "co.smartfence.ai",
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"],
+        "NSUserNotificationsUsageDescription": "SmartFence AI te notifica cuando tus animales salen del perímetro, cuando la batería del collar es baja o cuando hay algún problema con los dispositivos."
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/logo-icono.png"
+    },
+    "plugins": [
+      "expo-splash-screen",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo-icono.png",
+          "color": "#4CAF50",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "#{unread_notifications} nuevas alertas"
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://10.9.218.234:4000/api",
+      "socketUrl": "http://10.9.218.234:4000"
+    }
+  }
+}
