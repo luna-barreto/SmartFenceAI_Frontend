@@ -7,6 +7,7 @@ import {
 import Svg, { Path } from "react-native-svg";
 import { Mail, Lock, Eye, EyeOff, LogIn, CheckCircle } from "lucide-react-native";
 import { useAuth } from "@context/AuthContext";
+import { useOAuth, useClerk } from "@clerk/clerk-expo";
 
 // ─── Ondas SVG ────────────────────────────────────────────────────────────────
 function OndasBottom({ tx }: { tx: Animated.Value }) {
@@ -66,11 +67,28 @@ function AppleIcon() {
 // ─── LoginScreen ──────────────────────────────────────────────────────────────
 export default function LoginScreen() {
   const { iniciarSesion } = useAuth();
-  const [correo, setCorreo]             = useState("ganadero@smartfence.ai");
+  const { startOAuthFlow: googleOAuth } = useOAuth({ strategy: "oauth_google" });
+  const { startOAuthFlow: appleOAuth }  = useOAuth({ strategy: "oauth_apple" });
+  const { setActive } = useClerk();
+
+  const [correo, setCorreo]             = useState("");
   const [contraseña, setContraseña]     = useState("");
   const [verContraseña, setVer]         = useState(false);
   const [cargando, setCargando]         = useState(false);
   const [errorMsg, setErrorMsg]         = useState<string | null>(null);
+
+  async function manejarOAuth(flow: () => Promise<{ createdSessionId?: string | null }>) {
+    setErrorMsg(null);
+    setCargando(true);
+    try {
+      const { createdSessionId } = await flow();
+      if (createdSessionId) await setActive?.({ session: createdSessionId });
+    } catch (err: any) {
+      setErrorMsg(err?.errors?.[0]?.message ?? "Error al iniciar sesión con proveedor");
+    } finally {
+      setCargando(false);
+    }
+  }
 
   // ola breathing
   const waveAnim = useRef(new Animated.Value(-1)).current;
@@ -228,11 +246,11 @@ export default function LoginScreen() {
           </View>
 
           <View style={s.socialRow}>
-            <TouchableOpacity style={s.socialBtn} onPress={manejarIngreso}>
+            <TouchableOpacity style={s.socialBtn} onPress={() => manejarOAuth(googleOAuth)}>
               <GoogleIcon />
               <Text style={s.socialText}>Google</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.socialBtn} onPress={manejarIngreso}>
+            <TouchableOpacity style={s.socialBtn} onPress={() => manejarOAuth(appleOAuth)}>
               <AppleIcon />
               <Text style={s.socialText}>Apple</Text>
             </TouchableOpacity>

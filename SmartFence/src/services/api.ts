@@ -1,7 +1,7 @@
 import axios from "axios";
 import Constants from "expo-constants";
-import * as SecureStore from "expo-secure-store";
 import { Alerta, Animal, Cerca, Collar, RespuestaLogin, Usuario } from "@/types";
+import { clerkTokenRef } from "@/services/clerkTokenRef";
 
 const BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ??
@@ -15,42 +15,19 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync("sf_token");
+  const token = await clerkTokenRef.getToken?.();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
 api.interceptors.response.use(
   (res) => res,
-  async (error) => {
-    if (error?.response?.status === 401) {
-      await SecureStore.deleteItemAsync("sf_token");
-    }
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const AuthAPI = {
-  // POST /auth/login  — body: { email, contrasena }
-  login: (email: string, contrasena: string) =>
-    api.post<RespuestaLogin>("/auth/login", { email, contrasena }),
-
-  // POST /auth/registro  — body: { nombre, email, contrasena }
-  registro: (nombre: string, email: string, contrasena: string) =>
-    api.post<RespuestaLogin>("/auth/registro", { nombre, email, contrasena }),
-
-  // POST /auth/perfil  — NestJS devuelve { id, rol } (sin fincaId — viene del login)
-  perfil: () => api.post<{ id: string; rol: string; fincaId?: string | null }>("/auth/perfil"),
-
-  // PATCH /auth/perfil — actualiza datos del usuario autenticado
-  actualizarPerfil: (data: {
-    nombre?: string;
-    contrasena?: string;
-    telefono?: string;
-    direccion?: string;
-    departamento?: string;
-  }) => api.patch<{ id: string; nombre: string; email: string; rol: string }>("/auth/perfil", data),
+  // No login/registro/perfil — Clerk handles all auth. Keep as empty namespace for compatibility.
 };
 
 // ── Finca ─────────────────────────────────────────────────────────────────────

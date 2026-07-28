@@ -6,6 +6,7 @@ import {
 import { Mail, Lock, Eye, EyeOff, LogIn, CheckCircle, Shield, BarChart2 } from "lucide-react-native";
 import Svg, { Path } from "react-native-svg";
 import { useAuth } from "@context/AuthContext";
+import { useOAuth, useClerk } from "@clerk/clerk-expo";
 
 const C = {
   green:   "#4F9E2C",
@@ -36,12 +37,16 @@ function AppleIcon() {
 
 export default function LoginScreen() {
   const { iniciarSesion } = useAuth();
+  const { startOAuthFlow: googleOAuth } = useOAuth({ strategy: "oauth_google" });
+  const { startOAuthFlow: appleOAuth }  = useOAuth({ strategy: "oauth_apple" });
+  const { setActive } = useClerk();
   const { width } = useWindowDimensions();
 
-  const [correo,        setCorreo]    = useState("ganadero@smartfence.ai");
+  const [correo,        setCorreo]    = useState("");
   const [contraseña,    setContraseña] = useState("");
   const [verContraseña, setVer]       = useState(false);
   const [cargando,      setCargando]  = useState(false);
+  const [errorMsg,      setErrorMsg]  = useState<string | null>(null);
 
   // Breakpoints
   const isDesktop = width >= 960;
@@ -50,9 +55,25 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!correo) return;
+    setErrorMsg(null);
     setCargando(true);
     try {
       await iniciarSesion(correo, contraseña);
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? "Error al iniciar sesión");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  async function manejarOAuth(flow: () => Promise<{ createdSessionId?: string | null }>) {
+    setErrorMsg(null);
+    setCargando(true);
+    try {
+      const { createdSessionId } = await flow();
+      if (createdSessionId) await setActive?.({ session: createdSessionId });
+    } catch (err: any) {
+      setErrorMsg(err?.errors?.[0]?.message ?? "Error al iniciar sesión con proveedor");
     } finally {
       setCargando(false);
     }
@@ -212,12 +233,18 @@ export default function LoginScreen() {
               <View style={s.dividerLine} />
             </View>
 
+            {errorMsg && (
+              <View style={{ backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA", borderRadius: 10, padding: 10, marginBottom: 10 }}>
+                <Text style={{ color: "#DC2626", fontSize: 13 }}>⚠ {errorMsg}</Text>
+              </View>
+            )}
+
             <View style={s.socialRow}>
-              <TouchableOpacity style={s.socialBtn} activeOpacity={0.75}>
+              <TouchableOpacity style={s.socialBtn} activeOpacity={0.75} onPress={() => manejarOAuth(googleOAuth)}>
                 <GoogleIcon />
                 <Text style={s.socialTxt}>Google</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.socialBtn} activeOpacity={0.75}>
+              <TouchableOpacity style={s.socialBtn} activeOpacity={0.75} onPress={() => manejarOAuth(appleOAuth)}>
                 <AppleIcon />
                 <Text style={s.socialTxt}>Apple</Text>
               </TouchableOpacity>

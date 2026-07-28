@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useUser, useAuth as useClerkAuth, useSignIn, useClerk } from "@clerk/clerk-expo";
 import { Usuario } from "@/types";
-import { AuthAPI, FincaAPI } from "@/services/api";
+import { FincaAPI } from "@/services/api";
 import { conectarSocket, desconectarSocket, unirseAFinca } from "@/services/socket";
+import { clerkTokenRef } from "@/services/clerkTokenRef";
 
-const PERFIL_KEY = "sf_perfil_extra";
-const FINCA_KEY  = "sf_finca_id";
+const FINCA_KEY = "sf_finca_id";
 
 interface AuthContextType {
   usuario: Usuario | null;
@@ -19,125 +19,83 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { isLoaded, isSignedIn, user } = useUser();
+  const { getToken } = useClerkAuth();
+  const { signIn, setActive } = useSignIn();
+  const clerk = useClerk();
+
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [cargando, setCargando] = useState(true);
+  const [fincaIdCache, setFincaIdCache] = useState<string | null>(null);
 
+  // Expose Clerk's getToken to the axios interceptor
   useEffect(() => {
+    clerkTokenRef.getToken = () => getToken();
+    return () => { clerkTokenRef.getToken = null; };
+  }, [getToken]);
+
+  // Build the usuario object whenever Clerk's user changes
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (!isSignedIn || !user) {
+      setUsuario(null);
+      return;
+    }
+
+    const meta = (user.publicMetadata ?? {}) as Record<string, string>;
+    const u: Usuario = {
+      id: user.id,
+      nombre: [user.firstName, user.lastName].filter(Boolean).join(" "),
+      email: user.primaryEmailAddress?.emailAddress ?? "",
+      correo: user.primaryEmailAddress?.emailAddress ?? "",
+      rol: (meta.rol as Usuario["rol"]) ?? "GANADERO",
+      fincaId: fincaIdCache ?? undefined,
+    };
+    setUsuario(u);
+  }, [isLoaded, isSignedIn, user, fincaIdCache]);
+
+  // After sign-in: restore fincaId from cache + connect socket
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+
     (async () => {
-      const token = await SecureStore.getItemAsync("sf_token");
-      if (!token) {
-        setCargando(false);
-        return;
-      }
+      const cached = await AsyncStorage.getItem(FINCA_KEY);
+      if (cached) setFincaIdCache(cached);
 
-      // Restaurar desde caché inmediatamente para no bloquear la splash
-      const extra = await cargarExtra();
-      const fincaIdGuardado = await AsyncStorage.getItem(FINCA_KEY);
-      if (extra.nombre || extra.email) {
-        const u: Usuario = {
-          id: "",
-          nombre: extra.nombre ?? "",
-          email: extra.email ?? "",
-          correo: extra.email ?? "",
-          rol: "ganadero" as Usuario["rol"],
-          finca: extra.finca,
-          fincaId: extra.fincaId ?? fincaIdGuardado ?? undefined,
-          avatarUrl: extra.avatarUrl,
-          telefono: extra.telefono,
-          direccion: extra.direccion,
-          departamento: extra.departamento,
-        };
-        setUsuario(u);
-        setCargando(false);
-
-        // Validar token en segundo plano
-        AuthAPI.perfil()
-          .then(({ data: perfil }) => {
-            const fincaId = perfil.fincaId ?? u.fincaId;
-            setUsuario((prev) =>
-              prev ? { ...prev, id: perfil.id, rol: perfil.rol as Usuario["rol"], fincaId } : null
-            );
-            if (fincaId) {
-              unirseAFinca(fincaId);
-              AsyncStorage.setItem(FINCA_KEY, fincaId);
-            }
-            conectarSocket(token);
-          })
-          .catch(async () => {
-            await SecureStore.deleteItemAsync("sf_token");
-            setUsuario(null);
-          });
-      } else {
-        // Sin caché — esperar API (primera vez con token sin datos guardados)
-        try {
-          const { data: perfil } = await AuthAPI.perfil();
-          const u: Usuario = {
-            id: perfil.id,
-            nombre: "",
-            email: "",
-            correo: "",
-            rol: perfil.rol as Usuario["rol"],
-            fincaId: fincaIdGuardado ?? undefined,
-          };
-          setUsuario(u);
-          conectarSocket(token);
-        } catch {
-          await SecureStore.deleteItemAsync("sf_token");
-        }
-        setCargando(false);
+      const token = await getToken();
+      if (token) {
+        conectarSocket(token);
+        if (cached) unirseAFinca(cached);
       }
     })();
-  }, []);
-
-  async function cargarExtra(): Promise<Partial<Usuario>> {
-    try {
-      const raw = await AsyncStorage.getItem(PERFIL_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch { /* sin datos */ }
-    return {};
-  }
+  }, [isLoaded, isSignedIn]);
 
   async function iniciarSesion(correo: string, contrasena: string) {
-    try {
-      const { data } = await AuthAPI.login(correo, contrasena);
+    if (!signIn || !setActive) throw new Error("Clerk no está listo");
 
-      await SecureStore.setItemAsync("sf_token", data.tokenAcceso);
+    const result = await signIn.create({
+      identifier: correo,
+      password: contrasena,
+    }).catch((err: any) => {
+      const msg =
+        err?.errors?.[0]?.longMessage ??
+        err?.errors?.[0]?.message ??
+        "Credenciales incorrectas";
+      throw new Error(msg);
+    });
 
-      const u: Usuario = {
-        ...data.usuario,
-        correo: data.usuario.email,
-        fincaId: data.usuario.fincaId ?? undefined,
-        finca: data.usuario.finca ?? undefined,
-      };
-
-      const extra: Partial<Usuario> = {
-        nombre: u.nombre,
-        email: u.email,
-        fincaId: u.fincaId ?? undefined,
-        finca: u.finca,
-      };
-      await AsyncStorage.setItem(PERFIL_KEY, JSON.stringify(extra));
-      if (u.fincaId) await AsyncStorage.setItem(FINCA_KEY, u.fincaId);
-
-      setUsuario(u);
-      conectarSocket(data.tokenAcceso);
-      if (u.fincaId) unirseAFinca(u.fincaId);
-    } catch (err: any) {
-      // Relanzar el error para que la pantalla de login pueda mostrarlo al usuario
-      const mensaje =
-        err?.response?.data?.mensaje ||
-        err?.response?.data?.message ||
-        (err?.response?.status === 401 ? "Credenciales incorrectas" : null) ||
-        (err?.response?.status === 409 ? "El correo ya está registrado" : null) ||
-        "No se pudo conectar al servidor. Verifica tu conexión.";
-      throw new Error(mensaje);
+    if (result.status === "complete") {
+      await setActive({ session: result.createdSessionId });
+    } else {
+      throw new Error("No se pudo completar el inicio de sesión");
     }
   }
 
   async function cerrarSesion() {
-    await SecureStore.deleteItemAsync("sf_token");
     desconectarSocket();
-    setUsuario(null);
+    await AsyncStorage.removeItem(FINCA_KEY);
+    setFincaIdCache(null);
+    await clerk.signOut();
   }
 
   async function actualizarUsuario(campos: Partial<Usuario>) {
@@ -145,41 +103,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const actualizado = { ...usuario, ...campos };
     setUsuario(actualizado);
 
-    // Persistir localmente para sobrevivir reinicios
-    const extra = await cargarExtra();
-    await AsyncStorage.setItem(PERFIL_KEY, JSON.stringify({ ...extra, ...campos }));
-
-    // Sincronizar con el backend (modo demo = id "demo" → solo local)
-    if (usuario.id && usuario.id !== "demo") {
-      // Campos personales del usuario
-      const camposUsuario: Parameters<typeof AuthAPI.actualizarPerfil>[0] = {};
-      if (campos.nombre      !== undefined) camposUsuario.nombre       = campos.nombre;
-      if (campos.contrasena  !== undefined) camposUsuario.contrasena   = campos.contrasena;
-      if (campos.telefono    !== undefined) camposUsuario.telefono     = campos.telefono;
-      if (campos.direccion   !== undefined) camposUsuario.direccion    = campos.direccion;
-      if (campos.departamento !== undefined) camposUsuario.departamento = campos.departamento;
-
-      if (Object.keys(camposUsuario).length > 0) {
-        AuthAPI.actualizarPerfil(camposUsuario).catch(() => {
-          // Sin conexión — los cambios quedaron en caché local
-        });
-      }
-
-      // Nombre de la finca
-      if (campos.finca !== undefined && usuario.fincaId && usuario.fincaId !== "demo") {
-        FincaAPI.actualizar(usuario.fincaId, { nombre: campos.finca }).catch(() => {});
-      }
+    if (campos.fincaId && campos.fincaId !== usuario.fincaId) {
+      setFincaIdCache(campos.fincaId);
+      await AsyncStorage.setItem(FINCA_KEY, campos.fincaId);
+      unirseAFinca(campos.fincaId);
     }
 
-    // Si actualizaron el fincaId, unirse a esa sala WebSocket
-    if (campos.fincaId && campos.fincaId !== usuario.fincaId) {
-      unirseAFinca(campos.fincaId);
-      await AsyncStorage.setItem(FINCA_KEY, campos.fincaId);
+    if (campos.finca !== undefined && usuario.fincaId) {
+      FincaAPI.actualizar(usuario.fincaId, { nombre: campos.finca }).catch(() => {});
     }
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, cargando, iniciarSesion, cerrarSesion, actualizarUsuario }}>
+    <AuthContext.Provider value={{
+      usuario,
+      cargando: !isLoaded,
+      iniciarSesion,
+      cerrarSesion,
+      actualizarUsuario,
+    }}>
       {children}
     </AuthContext.Provider>
   );
