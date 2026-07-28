@@ -217,17 +217,18 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!usuario?.fincaId) return;
     AlertasAPI.listar(usuario.fincaId)
-      .then(({ data }) => setAlertasRecientes(data.slice(0, 10)))
+      .then(({ data }) => setAlertasRecientes(Array.isArray(data) ? data.slice(0, 10) : []))
       .catch(() => {});
   }, [usuario?.fincaId]);
 
   // Fusionar alertas que llegan en tiempo real por socket con las cargadas del API
   useEffect(() => {
-    if (!alertasSocket.length) return;
+    if (!Array.isArray(alertasSocket) || !alertasSocket.length) return;
     setAlertasRecientes((prev) => {
-      const ids = new Set(prev.map((a) => a.id));
+      const base = Array.isArray(prev) ? prev : [];
+      const ids = new Set(base.map((a) => a.id));
       const nuevas = alertasSocket.filter((a) => !ids.has(a.id));
-      return [...nuevas, ...prev].slice(0, 10);
+      return [...nuevas, ...base].slice(0, 10);
     });
   }, [alertasSocket]);
 

@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useState } from "react";
 import { useAnimals } from "@hooks/useAnimals";
 import { Alerta, Animal, Cerca } from "@/types";
+import { sonarAlarma } from "@services/alarma";
 
 interface AnimalsContextValue {
   animales: Animal[];
@@ -22,10 +23,12 @@ const AnimalsContext = createContext<AnimalsContextValue>({
 
 export function AnimalsProvider({ children }: { children: React.ReactNode }) {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
-  const onNuevaAlerta = useCallback(
-    (a: Alerta) => setAlertas((p) => [a, ...p].slice(0, 30)),
-    []
-  );
+  const onNuevaAlerta = useCallback((a: Alerta) => {
+    setAlertas((p) => [a, ...p].slice(0, 30));
+    if (a.tipo === "ANIMAL_SALIO" || a.severidad === "CRITICA") {
+      sonarAlarma();
+    }
+  }, []);
   const { animales, conectado, ultimaSync, cerca, recargar } = useAnimals({ onNuevaAlerta });
 
   return (

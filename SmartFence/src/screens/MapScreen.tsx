@@ -60,10 +60,11 @@ function MapStat({
 
 // ─── Modal nueva geocerca ────────────────────────────────────────────────────
 function NuevaGeocercaModal({
-  visible, onCerrar, fincaId, cercaActual, ubicacionUsuario,
+  visible, onCerrar, onGuardado, fincaId, cercaActual, ubicacionUsuario,
 }: {
   visible: boolean;
   onCerrar: () => void;
+  onGuardado?: () => void;
   fincaId?: string;
   cercaActual: Coordenada[];
   ubicacionUsuario: Coordenada | null;
@@ -83,12 +84,11 @@ function NuevaGeocercaModal({
         fincaId: fincaId,
         nombre: nombre.trim(),
         coordenadas: cercaActual,
-        // Enviar ubicación del dispositivo para que el backend pueda inicializar
-        // el centro del mapa de la finca si es la primera geocerca que se crea.
         latitudDispositivo: ubicacionUsuario?.lat,
         longitudDispositivo: ubicacionUsuario?.lng,
       });
       limpiar();
+      onGuardado?.();
       onCerrar();
       Alert.alert("✓ Geocerca creada", `"${nombre.trim()}" ha sido guardada en el servidor.`);
     } catch {
@@ -184,12 +184,17 @@ export default function MapScreen() {
   const { usuario } = useAuth();
   const nombreFinca = usuario?.finca ?? "Mi finca";
 
-  const { animales, cerca: cercaBackend } = useAnimalsCtx();
+  const { animales, cerca: cercaBackend, recargar: recargarContexto } = useAnimalsCtx();
 
   // Usa la geocerca real del backend; CERCA_DEMO solo si no hay backend todavía
   const hayGeocercaReal = !!cercaBackend?.coordenadas?.length;
   const nombreGeocerca = cercaBackend?.nombre ?? (hayGeocercaReal ? "Geocerca activa" : "Sin geocerca");
-  const [cerca, setCerca] = useState<Coordenada[]>([]);
+  // Inicializar desde el contexto directamente para que al volver a la pantalla
+  // no se muestre CERCA_DEMO mientras llega el primer render del useEffect.
+  const [cerca, setCerca] = useState<Coordenada[]>(
+    () => cercaBackend?.coordenadas?.length ? cercaBackend.coordenadas : CERCA_DEMO
+  );
+  const cercaRecentradaRef = useRef(false);
   useEffect(() => {
     if (hayGeocercaReal) {
       setCerca(cercaBackend!.coordenadas);
@@ -201,15 +206,28 @@ export default function MapScreen() {
 
   const mapaRef = useRef<MapaOSMHandle>(null);
 
-  const [editando, setEditando]         = useState(false);
+  const [editando, setEditando]           = useState(false);
   const [guardandoCerca, setGuardandoCerca] = useState(false);
   const [modalGeocerca, setModalGeocerca] = useState(false);
+  const modalGuardadoRef = useRef(false);
+  // snapshot de coords al entrar en edición — para restaurar si se cancela
+  const cercaSnapshotRef = useRef<Coordenada[]>([]);
 
   // GPS del dispositivo — siempre activo.
   // · Muestra el punto azul del usuario en el mapa.
   // · Centra el mapa en el usuario si aún no hay geocerca real guardada.
   // · Genera el polígono inicial al crear una nueva geocerca.
   const [ubicacionUsuario, setUbicacionUsuario] = useState<Coordenada | null>(null);
+
+  // Cuando llega el GPS por primera vez y no hay geocerca real, recentrar la
+  // cerca demo en la ubicación actual para que sea visible en el mapa.
+  useEffect(() => {
+    if (hayGeocercaReal) return;               // ya hay geocerca del backend
+    if (cercaRecentradaRef.current) return;    // ya se recentró antes
+    if (!ubicacionUsuario) return;
+    cercaRecentradaRef.current = true;
+    setCerca(generarPoligonoCentrado(ubicacionUsuario, 300));
+  }, [ubicacionUsuario, hayGeocercaReal]);
 
   useEffect(() => {
     let unsub: (() => void) | null = null;
@@ -274,16 +292,47 @@ export default function MapScreen() {
     return d;
   }, [cerca]);
 
-  async function guardarCerca(nuevaPuntos: Coordenada[]) {
+  // Solo actualiza estado local mientras el usuario arrastra vértices.
+  function guardarCerca(nuevaPuntos: Coordenada[]) {
     setCerca(nuevaPuntos);
+  }
+
+  function iniciarEdicion() {
+    cercaSnapshotRef.current = cerca;
+    setEditando(true);
+  }
+
+  function cancelarEdicion() {
+    setCerca(cercaSnapshotRef.current);
     setEditando(false);
-    const id = cercaIdRef.current;
-    if (!id) return;
+  }
+
+  async function confirmarGuardado() {
+    const fincaId = usuario?.fincaId;
+    if (!fincaId || fincaId === "demo") {
+      setEditando(false);
+      return;
+    }
     setGuardandoCerca(true);
     try {
-      await CercasAPI.actualizar(id, { coordenadas: nuevaPuntos });
+      const id = cercaIdRef.current;
+      if (!id) {
+        const { data } = await CercasAPI.crear({
+          fincaId,
+          nombre: "Geocerca principal",
+          coordenadas: cerca,
+          latitudDispositivo: ubicacionUsuario?.lat,
+          longitudDispositivo: ubicacionUsuario?.lng,
+        });
+        cercaIdRef.current = data.id;
+        recargarContexto();
+      } else {
+        await CercasAPI.actualizar(id, { coordenadas: cerca });
+        recargarContexto();
+      }
+      setEditando(false);
     } catch {
-      Alert.alert("Sin conexión", "Los cambios se guardaron localmente. Se sincronizarán cuando haya conexión.");
+      Alert.alert("Sin conexión", "No se pudo guardar. Intenta de nuevo cuando haya conexión.");
     } finally {
       setGuardandoCerca(false);
     }
@@ -359,7 +408,7 @@ export default function MapScreen() {
             <View style={st.mapActions}>
               <TouchableOpacity
                 style={[st.btnEditar, { backgroundColor: T.card, borderColor: T.borde }]}
-                onPress={() => setEditando(true)}
+                onPress={iniciarEdicion}
                 activeOpacity={0.85}
               >
                 <Pencil size={15} color={T.txtMain} strokeWidth={2} />
@@ -370,8 +419,9 @@ export default function MapScreen() {
                 activeOpacity={0.85}
                 onPress={() => {
                   const origen = ubicacionUsuario ?? (cerca.length ? centroDe(cerca) : centroFallback);
-                  setCerca(generarPoligonoCentrado(origen, 150));
-                  // Centrar el mapa en la ubicación del dispositivo antes de abrir el modal
+                  const nuevasCoordenadas = generarPoligonoCentrado(origen, 150);
+                  cercaSnapshotRef.current = cerca;
+                  setCerca(nuevasCoordenadas);
                   if (ubicacionUsuario) {
                     mapaRef.current?.centerarEnUsuario();
                   }
@@ -413,20 +463,24 @@ export default function MapScreen() {
           {/* Banner modo edición */}
           {editando && (
             <View style={[st.editBanner, { backgroundColor: T.verdeOscuro }]}>
-              <Text style={st.editBannerTxt}>Mueve los puntos para editar la cerca virtual</Text>
-              <TouchableOpacity style={st.editCancelBtn} onPress={() => setEditando(false)} activeOpacity={0.8}>
+              <Text style={st.editBannerTxt}>Arrastra los puntos para editar</Text>
+              <TouchableOpacity style={st.editCancelBtn} onPress={cancelarEdicion} activeOpacity={0.8} disabled={guardandoCerca}>
                 <Text style={st.editCancelTxt}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[st.editSaveBtn, guardandoCerca && { opacity: 0.6 }]}
+                onPress={confirmarGuardado}
+                activeOpacity={0.8}
+                disabled={guardandoCerca}
+              >
+                {guardandoCerca
+                  ? <ActivityIndicator size="small" color={T.verdeOscuro} />
+                  : <><Check size={13} color={T.verdeOscuro} strokeWidth={3} /><Text style={[st.editSaveTxt, { color: T.verdeOscuro }]}>Guardar</Text></>
+                }
               </TouchableOpacity>
             </View>
           )}
 
-          {/* Indicador guardando cerca */}
-          {guardandoCerca && (
-            <View style={[st.savingBanner, { backgroundColor: T.card, borderColor: T.borde }]}>
-              <ActivityIndicator size="small" color={T.verde} />
-              <Text style={[st.savingTxt, { color: T.txtMain }]}>Guardando geocerca…</Text>
-            </View>
-          )}
         </View>
 
         {/* ── Panel inferior: info de finca ── */}
@@ -491,12 +545,16 @@ export default function MapScreen() {
 
       <NuevaGeocercaModal
         visible={modalGeocerca}
+        onGuardado={() => {
+          modalGuardadoRef.current = true;
+          recargarContexto();
+        }}
         onCerrar={() => {
           setModalGeocerca(false);
-          // Restaurar la cerca real si el usuario cancela
-          if (cercaBackend?.coordenadas?.length) {
-            setCerca(cercaBackend.coordenadas);
+          if (!modalGuardadoRef.current) {
+            setCerca(cercaSnapshotRef.current);
           }
+          modalGuardadoRef.current = false;
         }}
         fincaId={usuario?.fincaId}
         cercaActual={cerca}
@@ -605,6 +663,12 @@ const st = StyleSheet.create({
     borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5,
   },
   editCancelTxt: { fontSize: 12, color: "#fff", fontWeight: "700" },
+  editSaveBtn: {
+    backgroundColor: "#fff",
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5,
+    flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 6,
+  },
+  editSaveTxt: { fontSize: 12, fontWeight: "800" },
 
   savingBanner: {
     position: "absolute", bottom: 60, left: 14,

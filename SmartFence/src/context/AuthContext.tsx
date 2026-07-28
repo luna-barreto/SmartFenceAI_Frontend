@@ -4,7 +4,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Usuario } from "@/types";
 import { AuthAPI, FincaAPI } from "@/services/api";
 import { conectarSocket, desconectarSocket, unirseAFinca } from "@/services/socket";
-import { CercasAPI } from "@/services/api";
 
 const PERFIL_KEY = "sf_perfil_extra";
 const FINCA_KEY  = "sf_finca_id";
@@ -104,19 +103,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await SecureStore.setItemAsync("sf_token", data.tokenAcceso);
 
-      let u: Usuario = {
+      const u: Usuario = {
         ...data.usuario,
         correo: data.usuario.email,
+        fincaId: data.usuario.fincaId ?? undefined,
+        finca: data.usuario.finca ?? undefined,
       };
-
-      // El NestJS no incluye fincaId en el login — lo obtenemos de la primera geocerca
-      if (!u.fincaId) {
-        try {
-          const { data: cercas } = await CercasAPI.listar();
-          const fincaId = cercas[0]?.fincaId;
-          if (fincaId) u = { ...u, fincaId };
-        } catch { /* sin conexión, se reintentará después */ }
-      }
 
       const extra: Partial<Usuario> = {
         nombre: u.nombre,
@@ -130,20 +122,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUsuario(u);
       conectarSocket(data.tokenAcceso);
       if (u.fincaId) unirseAFinca(u.fincaId);
-    } catch {
-      // Sin backend activo → modo demo
-      const nombre = correo.split("@")[0] || "Ganadero";
-      const u: Usuario = {
-        id: "demo",
-        nombre: nombre.charAt(0).toUpperCase() + nombre.slice(1),
-        email: correo,
-        correo,
-        rol: "ganadero" as Usuario["rol"],
-        fincaId: "demo",
-      };
-      await AsyncStorage.setItem(PERFIL_KEY, JSON.stringify({ nombre: u.nombre, email: u.email, fincaId: "demo" }));
-      await AsyncStorage.setItem(FINCA_KEY, "demo");
-      setUsuario(u);
+    } catch (err: any) {
+      // Relanzar el error para que la pantalla de login pueda mostrarlo al usuario
+      const mensaje =
+        err?.response?.data?.mensaje ||
+        err?.response?.data?.message ||
+        (err?.response?.status === 401 ? "Credenciales incorrectas" : null) ||
+        (err?.response?.status === 409 ? "El correo ya está registrado" : null) ||
+        "No se pudo conectar al servidor. Verifica tu conexión.";
+      throw new Error(mensaje);
     }
   }
 

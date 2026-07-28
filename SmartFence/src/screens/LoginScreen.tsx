@@ -70,6 +70,7 @@ export default function LoginScreen() {
   const [contraseña, setContraseña]     = useState("");
   const [verContraseña, setVer]         = useState(false);
   const [cargando, setCargando]         = useState(false);
+  const [errorMsg, setErrorMsg]         = useState<string | null>(null);
 
   // ola breathing
   const waveAnim = useRef(new Animated.Value(-1)).current;
@@ -106,10 +107,13 @@ export default function LoginScreen() {
   }, []);
 
   async function manejarIngreso() {
+    setErrorMsg(null);
     setCargando(true);
     try {
       await iniciarSesion(correo, contraseña);
       // RootRedirector detecta el cambio de usuario y navega a "Main"
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? "Error al iniciar sesión");
     } finally {
       setCargando(false);
     }
@@ -196,6 +200,13 @@ export default function LoginScreen() {
             <Text style={s.forgotText}>¿Olvidaste tu contraseña?</Text>
           </TouchableOpacity>
 
+          {/* Error banner */}
+          {errorMsg && (
+            <View style={s.errorBanner}>
+              <Text style={s.errorTxt}>⚠ {errorMsg}</Text>
+            </View>
+          )}
+
           {/* Botón ingresar */}
           <TouchableOpacity
             onPress={manejarIngreso}
@@ -208,7 +219,7 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* ── Bottom: social + demo ── */}
+        {/* ── Bottom: social ── */}
         <Animated.View style={[s.bottomWrap, { opacity: fadeBottom }]}>
           <View style={s.dividerRow}>
             <View style={s.dividerLine} />
@@ -226,10 +237,6 @@ export default function LoginScreen() {
               <Text style={s.socialText}>Apple</Text>
             </TouchableOpacity>
           </View>
-
-          <Text style={s.demoText}>
-            Modo <Text style={s.demoBold}>demo</Text>: puedes ingresar sin backend activo.
-          </Text>
         </Animated.View>
       </ScrollView>
 
@@ -280,8 +287,16 @@ const s = StyleSheet.create({
   },
   input: { flex: 1, fontSize: 15, color: "#152417" },
 
-  forgotWrap: { alignItems: "flex-end", marginTop: 10, marginBottom: 20 },
+  forgotWrap: { alignItems: "flex-end", marginTop: 10, marginBottom: 8 },
   forgotText: { fontSize: 13, fontWeight: "600", color: "#76C043" },
+
+  errorBanner: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1, borderColor: "#FECACA",
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+    marginBottom: 12,
+  },
+  errorTxt: { fontSize: 13, color: "#DC2626", fontWeight: "600" },
 
   btnIngresar: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
@@ -309,6 +324,5 @@ const s = StyleSheet.create({
   },
   socialText: { fontSize: 15, fontWeight: "600", color: "#152417" },
 
-  demoText: { fontSize: 12.5, color: "#9CA89E", textAlign: "center" },
-  demoBold: { fontWeight: "700", color: "#6F8B72" },
 });
+

@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import {
   CANALES_NOTIFICACION,
   DatosNotificacionSmartFence,
@@ -11,23 +12,31 @@ import {
 } from "./notificationTypes";
 import { navigateTo } from "@navigation/navigationRef";
 
+// En Expo Go (SDK 53+) las push notifications remotas no están disponibles.
+// Todas las funciones de este módulo son no-op cuando se detecta ese entorno.
+const EN_EXPO_GO =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
 // ── Configuración del handler global ─────────────────────────────────────────
-// Controla cómo se muestran las notificaciones cuando la app está en primer plano.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+if (!EN_EXPO_GO) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 let _listenerRecibida: Notifications.Subscription | null = null;
 let _listenerTocada: Notifications.Subscription | null = null;
 
 // ── Inicialización ────────────────────────────────────────────────────────────
 export async function inicializarNotificaciones(): Promise<boolean> {
+  if (EN_EXPO_GO) return false;
+
   // Crear canales Android
   if (Platform.OS === "android") {
     for (const canal of CANALES_NOTIFICACION) {
@@ -139,6 +148,7 @@ export async function enviarNotificacion(
   cuerpo: string,
   datos: Partial<DatosNotificacionSmartFence> = {}
 ): Promise<string | null> {
+  if (EN_EXPO_GO) return null;
   try {
     const canal = canalParaTipo(tipo);
     const prioridad = prioridadParaTipo(tipo);
@@ -332,10 +342,12 @@ export function notificarReporteDiario(fecha: string) {
 
 // ── Badge ─────────────────────────────────────────────────────────────────────
 export async function limpiarBadge() {
+  if (EN_EXPO_GO) return;
   await Notifications.setBadgeCountAsync(0);
 }
 
 export async function cancelarTodas() {
+  if (EN_EXPO_GO) return;
   await Notifications.cancelAllScheduledNotificationsAsync();
   await Notifications.dismissAllNotificationsAsync();
 }
@@ -344,6 +356,7 @@ export async function cancelarTodas() {
 const ID_REPORTE_DIARIO = "sf_reporte_diario_trigger";
 
 export async function programarReporteDiario(hora: number = 7, minuto: number = 0): Promise<void> {
+  if (EN_EXPO_GO) return;
   // Cancelar cualquier reporte anterior para evitar duplicados
   try {
     await Notifications.cancelScheduledNotificationAsync(ID_REPORTE_DIARIO);
@@ -370,6 +383,7 @@ export async function programarReporteDiario(hora: number = 7, minuto: number = 
 }
 
 export async function cancelarReporteDiario(): Promise<void> {
+  if (EN_EXPO_GO) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(ID_REPORTE_DIARIO);
   } catch {

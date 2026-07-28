@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,8 @@ import { useAnimals } from "@hooks/useAnimals";
 import { useAuth } from "@context/AuthContext";
 import { useT } from "@context/ThemeContext";
 import { Alerta } from "@/types";
+import { AlertasAPI } from "@/services/api";
+import { suscribirAlertas } from "@/services/socket";
 import WebSidebar from "@components/WebSidebar";
 import WebTopBar from "@components/WebTopBar";
 import { navigateTo } from "@navigation/navigationRef";
@@ -234,52 +236,71 @@ function ResumenRow({
 }
 
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
+function tiempoRelativoCorto(fecha: string): string {
+  const diff = (Date.now() - new Date(fecha).getTime()) / 1000;
+  if (diff < 60) return "Ahora";
+  if (diff < 3600) return `Hace ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `Hace ${Math.floor(diff / 3600)} h`;
+  return `Hace ${Math.floor(diff / 86400)} d`;
+}
+
+function alertaAActItem(a: Alerta, T: ReturnType<typeof useT>): ActItem {
+  const esCritica = a.severidad === "CRITICA";
+  const esMedia = a.severidad === "MEDIA";
+  const icono = esCritica ? BellRing : esMedia ? BatteryMedium : MapPinned;
+  const color = esCritica ? T.rojo : esMedia ? T.naranja : T.verde;
+  const fondo = esCritica ? T.rojoBg : esMedia ? T.naranjaBg : T.verdeAlfa;
+  const sub = a.animal?.nombre
+    ? `${a.animal.nombre}${a.animal.finca ? " • " + a.animal.finca.nombre : ""}`
+    : a.mensaje;
+  return {
+    icono,
+    titulo: a.mensaje,
+    sub,
+    tiempo: tiempoRelativoCorto(a.fecha),
+    tiempoColor: color,
+    fondo,
+    color,
+  };
+}
+
 export default function HomeScreen() {
-  useWindowDimensions(); // kept per import spec
   const { animales, conectado } = useAnimals();
   const { usuario } = useAuth();
   const T = useT();
   const [alertas, setAlertas] = useState<Alerta[]>([]);
 
+  const cargarAlertas = useCallback(async (fincaId: string) => {
+    try {
+      const { data } = await AlertasAPI.listar(fincaId);
+      setAlertas(data.map((a) => ({ ...a, leida: a.estado !== "PENDIENTE", resuelta: a.estado === "RESUELTA" })));
+    } catch { /* sin backend: alertas vacías */ }
+  }, []);
+
+  useEffect(() => {
+    if (usuario?.fincaId && usuario.fincaId !== "demo") {
+      cargarAlertas(usuario.fincaId);
+    }
+  }, [usuario?.fincaId, cargarAlertas]);
+
+  // Alertas nuevas en tiempo real vía WebSocket
+  useEffect(() => {
+    const cancelar = suscribirAlertas((alerta) => {
+      setAlertas((prev) => [
+        { ...alerta, leida: false, resuelta: false },
+        ...prev.slice(0, 49),
+      ]);
+    });
+    return () => { cancelar?.(); };
+  }, []);
+
   const activas = alertas.filter((a) => !a.resuelta);
   const bateriaProm = animales.length
     ? Math.round(animales.reduce((s, a) => s + (a.collar?.bateria ?? 0), 0) / animales.length)
     : 69;
-  const nombre = usuario?.nombre?.split(" ")[0] ?? "Ganadero";
-
-  const actividadDemo: ActItem[] = [
-    {
-      icono: BellRing,
-      titulo: "Animal fuera de la cerca",
-      sub: "Vaca 19 • Potrero Norte",
-      tiempo: "Hace 2 min",
-      tiempoColor: T.rojo,
-      fondo: T.rojoBg,
-      color: T.rojo,
-    },
-    {
-      icono: BatteryMedium,
-      titulo: "Batería baja",
-      sub: "Lucero #100 • 68%",
-      tiempo: "Hace 15 min",
-      tiempoColor: T.naranja,
-      fondo: T.naranjaBg,
-      color: T.naranja,
-    },
-    {
-      icono: MapPinned,
-      titulo: "Entrada a la zona segura",
-      sub: "Toro 7 • Potrero Central",
-      tiempo: "Hace 35 min",
-      tiempoColor: T.verde,
-      fondo: T.verdeAlfa,
-      color: T.verde,
-    },
-  ];
 
   const { width } = useWindowDimensions();
   const isMd = width < 1100;
-  const isSm = width < 768;
 
   return (
     <View style={[st.root, { backgroundColor: T.fondo }]}>
@@ -459,10 +480,15 @@ export default function HomeScreen() {
                     <Text style={[st.verTodas, { color: T.verde }]}>Ver todas</Text>
                   </TouchableOpacity>
                 </View>
-                {actividadDemo.map((item, i) => (
-                  <ActividadRow key={i} item={item} T={T} />
+                {alertas.slice(0, 5).map((a) => (
+                  <ActividadRow key={a.id} item={alertaAActItem(a, T)} T={T} />
                 ))}
-              </View>
+                {alertas.length === 0 && (
+                  <Text style={[st.actSub, { color: T.txtSec, paddingVertical: 12, textAlign: "center" }]}>
+                    Sin actividad reciente
+                  </Text>
+                )}
+             </View>
             </View>
 
             {/* Right column */}

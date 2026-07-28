@@ -153,9 +153,20 @@ export function useAnimals(opciones: UsarAnimalesOpciones = {}) {
     cargarDesdeBackend(fincaId);
   }, [usuario?.fincaId, cargarDesdeBackend]);
 
+  const recargarCerca = useCallback((fincaId: string) => {
+    CercasAPI.listar(fincaId)
+      .then(({ data }) => {
+        const activa = data.find((c) => c.activa) ?? data[0];
+        if (activa) setCerca({ ...activa, puntos: activa.coordenadas, areaHa: activa.areaHectareas ?? undefined });
+      })
+      .catch(() => undefined);
+  }, []);
+
   const recargar = useCallback(() => {
-    if (usuario?.fincaId) cargarDesdeBackend(usuario.fincaId);
-  }, [usuario?.fincaId, cargarDesdeBackend]);
+    if (!usuario?.fincaId) return;
+    cargarDesdeBackend(usuario.fincaId);
+    recargarCerca(usuario.fincaId);
+  }, [usuario?.fincaId, cargarDesdeBackend, recargarCerca]);
 
   // ── WebSocket — posición GPS en tiempo real ────────────────────────────────
   useEffect(() => {

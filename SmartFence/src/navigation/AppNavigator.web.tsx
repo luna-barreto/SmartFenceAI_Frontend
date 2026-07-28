@@ -27,7 +27,7 @@ const OuterStack = createNativeStackNavigator<PilaRaiz>();
 
 type PilaInterna = Pick<
   PilaRaiz,
-  "Main" | "Home" | "Map" | "Animals" | "Alerts" | "Profile" |
+  "Home" | "Map" | "Animals" | "Alerts" | "Profile" |
   "AnimalDetail" | "Devices" | "Settings" | "Info" | "Admin"
 >;
 const InnerStack = createNativeStackNavigator<PilaInterna>();
@@ -39,7 +39,6 @@ function MainConDrawer() {
         <InnerStack.Navigator
           screenOptions={{ headerShown: false, animation: "none" }}
         >
-          <InnerStack.Screen name="Main"        component={HomeScreen}        />
           <InnerStack.Screen name="Home"        component={HomeScreen}        />
           <InnerStack.Screen name="Map"         component={MapScreen}         />
           <InnerStack.Screen name="Animals"     component={AnimalsScreen}     />

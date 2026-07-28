@@ -12,8 +12,11 @@ let socket: Socket | null = null;
 export function conectarSocket(token?: string): Socket {
   if (socket?.connected) return socket;
 
+  // Codespaces/proxies requieren polling como transporte inicial; socket.io
+  // hace upgrade a websocket automáticamente si el servidor lo soporta.
+  const isSecure = SOCKET_URL.startsWith("https://");
   socket = io(SOCKET_URL, {
-    transports: ["websocket"],
+    transports: isSecure ? ["polling", "websocket"] : ["websocket"],
     auth: token ? { token } : undefined,
     reconnection: true,
     reconnectionAttempts: 10,
@@ -37,14 +40,14 @@ export function desconectarSocket() {
 }
 
 // El backend emite "gps:posicion" (no "telemetria:collar")
-export function suscribirTelemetria(cb: (evento: EventoTelemetria) => void) {
+export function suscribirTelemetria(cb: (evento: EventoTelemetria) => void): () => void {
   socket?.on("gps:posicion", cb);
-  return () => socket?.off("gps:posicion", cb);
+  return () => { socket?.off("gps:posicion", cb); };
 }
 
-export function suscribirAlertas(cb: (alerta: Alerta) => void) {
+export function suscribirAlertas(cb: (alerta: Alerta) => void): () => void {
   socket?.on("alerta:nueva", cb);
-  return () => socket?.off("alerta:nueva", cb);
+  return () => { socket?.off("alerta:nueva", cb); };
 }
 
 export default { conectarSocket, desconectarSocket, unirseAFinca, salirDeFinca, suscribirTelemetria, suscribirAlertas };

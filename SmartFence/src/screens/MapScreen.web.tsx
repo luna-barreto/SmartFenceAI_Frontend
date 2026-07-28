@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
+  ActivityIndicator,
 } from "react-native";
 import {
   Plus,
@@ -16,15 +17,20 @@ import {
   Wifi,
   ChevronRight,
   FileText,
+  Pencil,
+  X,
+  Check,
 } from "lucide-react-native";
 import { useT } from "@context/ThemeContext";
-import { useAnimals, CERCA_DEMO } from "@hooks/useAnimals";
-import { centroDe } from "@utils/geo";
+import { CERCA_DEMO } from "@hooks/useAnimals";
+import { useAnimalsCtx } from "@context/AnimalsContext";
+import { centroDe, generarPoligonoCentrado } from "@utils/geo";
 import { Coordenada } from "@/types";
 import { navigateTo } from "@navigation/navigationRef";
 import WebSidebar from "@components/WebSidebar";
 import WebTopBar from "@components/WebTopBar";
-import MapaOSM from "@components/MapaOSM";
+import MapaOSM, { MapaOSMHandle } from "@components/MapaOSM";
+import { CercasAPI } from "@services/api";
 
 // ─── Demo animal rows shown when animales is empty ────────────────────────────
 const DEMO_NAMES = [
@@ -49,22 +55,32 @@ function Divider({ marginVertical }: { marginVertical: number }) {
 // ─── MapScreen (web) ──────────────────────────────────────────────────────────
 export default function MapScreen() {
   const T = useT();
-  const { animales, cerca: cercaBackend } = useAnimals();
-  const [showNuevaGeocerca, setShowNuevaGeocerca] = useState(false);
+  const { animales, conectado, cerca: cercaBackend, recargar: recargarContexto } = useAnimalsCtx();
   const [busqueda, setBusqueda] = useState("");
+  const [editando, setEditando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const mapaRef = useRef<MapaOSMHandle>(null);
+  const cercaIdRef = useRef<string | undefined>(cercaBackend?.id);
+  const cercaSnapshotRef = useRef<Coordenada[]>([]);
 
-  const cercaCoords = cercaBackend?.coordenadas?.length
-    ? cercaBackend.coordenadas
-    : CERCA_DEMO;
+  // Inicializar desde el contexto para no mostrar CERCA_DEMO al volver a la pantalla
+  const [cerca, setCerca] = useState<Coordenada[]>(
+    () => cercaBackend?.coordenadas?.length ? cercaBackend.coordenadas : CERCA_DEMO
+  );
 
-  // GPS del browser — siempre activo para mostrar el punto azul del usuario.
-  // Se usa para centrar el mapa SOLO si aún no hay geocerca guardada (primer uso).
+  useEffect(() => {
+    const coords = cercaBackend?.coordenadas?.length ? cercaBackend.coordenadas : CERCA_DEMO;
+    setCerca(coords);
+    cercaIdRef.current = cercaBackend?.id;
+  }, [cercaBackend]);
+
+  // GPS del browser
   const [ubicacionUsuario, setUbicacionUsuario] = useState<Coordenada | null>(null);
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => { /* permiso denegado o no disponible */ },
+      () => {},
       { enableHighAccuracy: true, timeout: 10000 }
     );
     const watchId = navigator.geolocation.watchPosition(
@@ -79,13 +95,41 @@ export default function MapScreen() {
     ? Math.round(animales.reduce((s, a) => s + (a.collar?.bateria ?? 0), 0) / animales.length)
     : 69;
 
-  // Si hay geocerca guardada → centrar en la geocerca (referencia permanente del sistema).
-  // Si no hay geocerca aún (primer uso) → centrar en el GPS del usuario para crear la finca.
-  const cercaEsDemo = cercaCoords === CERCA_DEMO || !cercaBackend?.coordenadas?.length;
-  const centro = cercaEsDemo ? (ubicacionUsuario ?? centroDe(cercaCoords)) : centroDe(cercaCoords);
+  const cercaEsDemo = !cercaBackend?.coordenadas?.length;
+  const centro = cercaEsDemo
+    ? (ubicacionUsuario ?? centroDe(cerca.length ? cerca : CERCA_DEMO))
+    : centroDe(cerca);
 
-  const dentroCount = animales.filter((a) => a.dentroDeCerca).length || 10;
-  const fueraCount = animales.filter((a) => !a.dentroDeCerca).length || 1;
+  // Recibe coords al soltar un vértice — actualiza estado local, NO sale del modo edición
+  const guardarCerca = useCallback(async (pts: Coordenada[]) => {
+    setCerca(pts);
+    const id = cercaIdRef.current;
+    if (!id) return;
+    setGuardando(true);
+    try {
+      await CercasAPI.actualizar(id, { coordenadas: pts });
+      recargarContexto();
+    }
+    catch { /* sin backend: local only */ }
+    finally { setGuardando(false); }
+  }, [recargarContexto]);
+
+  function iniciarEdicion() {
+    cercaSnapshotRef.current = cerca;
+    setEditando(true);
+  }
+
+  function cancelarEdicion() {
+    setCerca(cercaSnapshotRef.current);
+    setEditando(false);
+  }
+
+  const dentroCount = animales.length
+    ? animales.filter((a) => a.dentroDeCerca).length
+    : 10;
+  const fueraCount = animales.length
+    ? animales.filter((a) => !a.dentroDeCerca).length
+    : 1;
 
   // Animal list — use real data or 8 demo rows
   const listaAnimales =
@@ -122,7 +166,12 @@ export default function MapScreen() {
       <TouchableOpacity
         style={[st.btnNuevaGeocerca, { backgroundColor: T.verdeOscuro }]}
         activeOpacity={0.85}
-        onPress={() => setShowNuevaGeocerca(true)}
+        onPress={() => {
+          const origen = ubicacionUsuario ?? centroDe(cerca.length ? cerca : CERCA_DEMO);
+          cercaSnapshotRef.current = cerca;
+          setCerca(generarPoligonoCentrado(origen, 150));
+          setEditando(true);
+        }}
       >
         <Plus size={14} color="#fff" strokeWidth={2.5} />
         <Text style={st.btnNuevaGeocercaTxt}>Nueva geocerca</Text>
@@ -286,14 +335,46 @@ export default function MapScreen() {
           {/* ── CENTER MAP ── */}
           <View style={st.mapArea}>
             <MapaOSM
+              ref={mapaRef}
               animales={animales}
-              cerca={cercaCoords}
+              cerca={cerca}
               centro={centro}
+              editando={editando}
+              onGuardarCerca={guardarCerca}
               ubicacionUsuario={ubicacionUsuario}
             />
 
+            {/* Botones de edición */}
+            {!editando ? (
+              <TouchableOpacity
+                style={[st.btnEditar, { backgroundColor: T.card, borderColor: T.borde }]}
+                onPress={iniciarEdicion}
+                activeOpacity={0.85}
+              >
+                <Pencil size={14} color={T.txtMain} strokeWidth={2} />
+                <Text style={[st.btnEditarTxt, { color: T.txtMain }]}>Editar cerca</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={st.editBannerWeb}>
+                <View style={[st.editBannerInner, { backgroundColor: T.verdeOscuro }]}>
+                  <Text style={st.editBannerTxt}>Mueve los vértices para editar · Se guardará al soltar</Text>
+                  <TouchableOpacity onPress={cancelarEdicion} activeOpacity={0.8}>
+                    <X size={16} color="#fff" strokeWidth={2.5} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Guardando */}
+            {guardando && (
+              <View style={[st.savingBadge, { backgroundColor: T.card, borderColor: T.borde }]}>
+                <ActivityIndicator size="small" color={T.verde} />
+                <Text style={[st.savingTxt, { color: T.txtMain }]}>Guardando…</Text>
+              </View>
+            )}
+
             {/* Legend pill on map */}
-            <View style={st.mapPill}>
+            <View style={[st.mapPill, { backgroundColor: T.card }]}>
               <View style={[st.pillDot, { backgroundColor: T.verde }]} />
               <Text style={[st.pillTxt, { color: T.txtMain }]}>
                 Dentro ({dentroCount})
@@ -874,4 +955,55 @@ const st = StyleSheet.create({
   batPct: {
     fontSize: 10,
   },
+
+  // Edit fence button (floating bottom-left of map)
+  btnEditar: {
+    position: "absolute",
+    bottom: 56,
+    left: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  btnEditarTxt: { fontSize: 12, fontWeight: "700" },
+
+  // Edit mode banner (top of map)
+  editBannerWeb: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  editBannerInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  editBannerTxt: { fontSize: 12, color: "#fff", fontWeight: "600", flex: 1, marginRight: 8 },
+
+  // Saving badge
+  savingBadge: {
+    position: "absolute",
+    bottom: 56,
+    right: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  savingTxt: { fontSize: 12, fontWeight: "600" },
 });

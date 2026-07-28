@@ -136,5 +136,5 @@ export interface EventoTelemetria {
 // ── Respuesta login del backend ───────────────────────────────────────────────
 export interface RespuestaLogin {
   tokenAcceso: string;
-  usuario: Omit<Usuario, "finca" | "fincaId">;
+  usuario: Omit<Usuario, "correo"> & { fincaId?: string | null; finca?: string | null };
 }

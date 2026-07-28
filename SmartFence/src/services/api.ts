@@ -56,7 +56,7 @@ export const AuthAPI = {
 // ── Finca ─────────────────────────────────────────────────────────────────────
 export const FincaAPI = {
   actualizar: (id: string, data: { nombre?: string }) =>
-    api.patch<{ id: string; nombre: string }>(`/fincas/${id}`, data),
+    api.put<{ id: string; nombre: string }>(`/fincas/${id}`, data),
 };
 
 // ── Animales ──────────────────────────────────────────────────────────────────

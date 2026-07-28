@@ -57,8 +57,8 @@
       ]
     ],
     "extra": {
-      "apiUrl": "http://10.9.218.234:4000/api",
-      "socketUrl": "http://10.9.218.234:4000"
+      "apiUrl": "https://improved-space-goldfish-696q5j646x5gfr47j-4000.app.github.dev/api",
+      "socketUrl": "https://improved-space-goldfish-696q5j646x5gfr47j-4000.app.github.dev"
     }
   }
 }

@@ -6,6 +6,7 @@ import {
   Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AnimalesAPI } from "@services/api";
 import {
   Pencil, CircleCheck, TriangleAlert, Shield, Heart, Weight,
   BatteryMedium, Signal, Wifi, Clock, Radio,
@@ -335,6 +336,19 @@ export default function AnimalDetailScreen({ route }: Props) {
     const nuevo = { ...local, [id]: valor.trim() };
     setLocal(nuevo);
     await AsyncStorage.setItem(ANIMAL_KEY, JSON.stringify(nuevo));
+
+    // Sincronizar con el backend los campos que existen en la BD
+    if (animal.id && animal.id.startsWith("a-") === false) {
+      const camposBackend: Record<string, string> = {};
+      if (id === "nombre") camposBackend.nombre = valor.trim();
+      if (id === "raza")   camposBackend.raza   = valor.trim();
+      if (Object.keys(camposBackend).length > 0) {
+        AnimalesAPI.actualizar(animal.id, camposBackend).catch(() => {
+          // Sin conexión — queda guardado localmente
+        });
+      }
+    }
+
     setGuardando(false);
     setCampoActivo(null);
   }
@@ -451,112 +465,147 @@ export default function AnimalDetailScreen({ route }: Props) {
             icon={Shield}
             titulo="Dispositivo (Collar)"
             badge={
-              <View style={st.activoBadge}>
-                <View style={[st.activoDot,
-                  { backgroundColor: animal.collar?.estado === "en_linea" ? C.verde : C.naranja }]}
-                />
-                <Text style={[st.activoTxt,
-                  { color: animal.collar?.estado === "en_linea" ? C.verdeOscuro : C.naranja }]}>
-                  {animal.collar?.estado === "en_linea" ? "Activo" : "Sin rango"}
-                </Text>
-              </View>
+              !animal.collar
+                ? (
+                  <View style={[st.activoBadge, { backgroundColor: "#F3F4F6" }]}>
+                    <View style={[st.activoDot, { backgroundColor: C.txtSec }]} />
+                    <Text style={[st.activoTxt, { color: C.txtSec }]}>Sin collar</Text>
+                  </View>
+                ) : (
+                  <View style={[st.activoBadge, {
+                    backgroundColor: animal.collar.estado === "en_linea" ? C.verdeLuz : C.rojoBg,
+                  }]}>
+                    <View style={[st.activoDot, {
+                      backgroundColor: animal.collar.estado === "en_linea" ? C.verde : C.rojo,
+                    }]} />
+                    <Text style={[st.activoTxt, {
+                      color: animal.collar.estado === "en_linea" ? C.verdeOscuro : C.rojo,
+                    }]}>
+                      {animal.collar.estado === "en_linea"
+                        ? "Activo"
+                        : animal.collar.estado === "fuera_de_rango"
+                          ? "Sin rango"
+                          : "Sin señal"}
+                    </Text>
+                  </View>
+                )
             }
           />
 
-          <View style={st.collarRow}>
-            <View style={st.collarImgBox}>
-              <Image
-                source={require("../../assets/logotipo.png")}
-                style={st.collarImg}
-                resizeMode="contain"
-              />
-            </View>
-            <View style={{ flex: 1, gap: 4 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Text style={st.collarId}>{animal.collar?.id ?? "—"}</Text>
-                <View style={st.loraBadge}>
-                  <Text style={st.loraTxt}>{animal.collar?.protocolo ?? "LoRa"}</Text>
-                </View>
-              </View>
-              <Text style={st.collarSub}>Collar GPS LoRa</Text>
-            </View>
-          </View>
-
-          {/* Grid fila 1 */}
-          <View style={st.collarStats}>
-            <View style={st.collarStatCard}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <BatteryMedium size={16} color={bateriaColor} strokeWidth={1.6} />
-                <Text style={st.collarStatLabel}>Batería</Text>
-              </View>
-              <Text style={[st.collarStatValor, { color: bateriaColor }]}>{bateria}%</Text>
-              <View style={st.bateriaBarBg}>
-                <View style={[st.bateriaBarFill,
-                  { width: `${bateria}%`, backgroundColor: bateriaColor }]}
-                />
-              </View>
-            </View>
-
-            <View style={st.collarStatCard}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <Signal size={16} color={C.azul} strokeWidth={1.6} />
-                <Text style={st.collarStatLabel}>Señal</Text>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <Text style={st.collarStatValor}>{animal.collar?.señal ?? "—"}</Text>
-                <Signal size={12} color={C.azul} strokeWidth={2} />
-              </View>
-            </View>
-
-            <View style={st.collarStatCard}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <Radio size={16} color="#7C3AED" strokeWidth={1.6} />
-                <Text style={st.collarStatLabel}>Protocolo</Text>
-              </View>
-              <Text style={st.collarStatValor}>{animal.collar?.protocolo ?? "LoRa"}</Text>
-            </View>
-          </View>
-
-          {/* Grid fila 2 */}
-          <View style={st.collarStats}>
-            <View style={st.collarStatCard}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <Clock size={16} color={C.txtSec} strokeWidth={1.6} />
-                <Text style={st.collarStatLabel}>Última transmisión</Text>
-              </View>
-              <Text style={st.collarStatValor}>
-                {ultimaTrans === "ahora" ? "Ahora mismo" : ultimaTrans}
-              </Text>
-              <Text style={st.collarStatSub}>
-                {new Date(animal.collar.ultimaConexion).toLocaleTimeString("es-CO", {
-                  hour: "2-digit", minute: "2-digit",
-                })}
+          {!animal.collar ? (
+            <View style={st.sinCollarWrap}>
+              <Shield size={36} color={C.borde} strokeWidth={1.4} />
+              <Text style={st.sinCollarTxt}>Sin collar asignado</Text>
+              <Text style={st.sinCollarSub}>
+                Este animal no tiene un collar GPS asociado todavía.
               </Text>
             </View>
-
-            {/* Frecuencia — editable */}
-            <TouchableOpacity style={st.collarStatCard} activeOpacity={0.7}
-              onPress={() => abrirCampo("frecuenciaEnvio")}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <Wifi size={16} color={C.verde} strokeWidth={1.6} />
-                  <Text style={st.collarStatLabel}>Frecuencia</Text>
+          ) : (
+            <>
+              <View style={st.collarRow}>
+                <View style={st.collarImgBox}>
+                  <Image
+                    source={require("../../assets/logotipo.png")}
+                    style={st.collarImg}
+                    resizeMode="contain"
+                  />
                 </View>
-                <Pencil size={10} color={C.verde} strokeWidth={2.5} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={st.collarId}>{animal.collar.serial || animal.collar.id}</Text>
+                    <View style={st.loraBadge}>
+                      <Text style={st.loraTxt}>{animal.collar.protocolo ?? "LoRa"}</Text>
+                    </View>
+                  </View>
+                  <Text style={st.collarSub}>Collar GPS LoRa</Text>
+                </View>
               </View>
-              <Text style={st.collarStatValor}>{local.frecuenciaEnvio}</Text>
-              <Text style={st.collarStatSub}>Cada {local.frecuenciaEnvio}</Text>
-            </TouchableOpacity>
 
-            <View style={st.collarStatCard}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <Shield size={16} color={C.verde} strokeWidth={1.6} />
-                <Text style={st.collarStatLabel}>Estado</Text>
+              {/* Grid fila 1 */}
+              <View style={st.collarStats}>
+                <View style={st.collarStatCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <BatteryMedium size={16} color={bateriaColor} strokeWidth={1.6} />
+                    <Text style={st.collarStatLabel}>Batería</Text>
+                  </View>
+                  <Text style={[st.collarStatValor, { color: bateriaColor }]}>{bateria}%</Text>
+                  <View style={st.bateriaBarBg}>
+                    <View style={[st.bateriaBarFill,
+                      { width: `${bateria}%` as any, backgroundColor: bateriaColor }]}
+                    />
+                  </View>
+                </View>
+
+                <View style={st.collarStatCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Signal size={16} color={C.azul} strokeWidth={1.6} />
+                    <Text style={st.collarStatLabel}>Señal</Text>
+                  </View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={st.collarStatValor}>{animal.collar.señal ?? "—"}</Text>
+                    <Signal size={12} color={C.azul} strokeWidth={2} />
+                  </View>
+                </View>
+
+                <View style={st.collarStatCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Radio size={16} color="#7C3AED" strokeWidth={1.6} />
+                    <Text style={st.collarStatLabel}>Protocolo</Text>
+                  </View>
+                  <Text style={st.collarStatValor}>{animal.collar.protocolo ?? "LoRa"}</Text>
+                </View>
               </View>
-              <Text style={[st.collarStatValor, { color: C.verde }]}>Funcionando</Text>
-              <Text style={st.collarStatSub}>Todo normal</Text>
-            </View>
-          </View>
+
+              {/* Grid fila 2 */}
+              <View style={st.collarStats}>
+                <View style={st.collarStatCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Clock size={16} color={C.txtSec} strokeWidth={1.6} />
+                    <Text style={st.collarStatLabel}>Última transmisión</Text>
+                  </View>
+                  <Text style={st.collarStatValor}>
+                    {ultimaTrans === "ahora" ? "Ahora mismo" : ultimaTrans}
+                  </Text>
+                  <Text style={st.collarStatSub}>
+                    {animal.collar.ultimaConexion
+                      ? new Date(animal.collar.ultimaConexion).toLocaleTimeString("es-CO", {
+                          hour: "2-digit", minute: "2-digit",
+                        })
+                      : "—"}
+                  </Text>
+                </View>
+
+                {/* Frecuencia — editable */}
+                <TouchableOpacity style={st.collarStatCard} activeOpacity={0.7}
+                  onPress={() => abrirCampo("frecuenciaEnvio")}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                      <Wifi size={16} color={C.verde} strokeWidth={1.6} />
+                      <Text style={st.collarStatLabel}>Frecuencia</Text>
+                    </View>
+                    <Pencil size={10} color={C.verde} strokeWidth={2.5} />
+                  </View>
+                  <Text style={st.collarStatValor}>{local.frecuenciaEnvio}</Text>
+                  <Text style={st.collarStatSub}>Cada {local.frecuenciaEnvio}</Text>
+                </TouchableOpacity>
+
+                <View style={st.collarStatCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Shield size={16} color={C.verde} strokeWidth={1.6} />
+                    <Text style={st.collarStatLabel}>Estado</Text>
+                  </View>
+                  <Text style={[st.collarStatValor, {
+                    color: animal.collar.estado === "en_linea" ? C.verde : C.naranja,
+                  }]}>
+                    {animal.collar.estado === "en_linea" ? "Funcionando" : "Revisar"}
+                  </Text>
+                  <Text style={st.collarStatSub}>
+                    {animal.collar.estado === "en_linea" ? "Todo normal" : "Sin transmisión"}
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
         </Seccion>
 
         {/* ── Ubicación actual ── */}
@@ -569,7 +618,9 @@ export default function AnimalDetailScreen({ route }: Props) {
               <View>
                 <Text style={st.seccionTitulo}>Ubicación actual</Text>
                 <Text style={st.ubicacionCoords}>
-                  lat {animal.ubicacion.lat.toFixed(5)},  lng {animal.ubicacion.lng.toFixed(5)}
+                  {animal.ubicacion
+                    ? `lat ${animal.ubicacion.lat.toFixed(5)},  lng ${animal.ubicacion.lng.toFixed(5)}`
+                    : "Sin señal GPS"}
                 </Text>
               </View>
             </View>
@@ -582,7 +633,9 @@ export default function AnimalDetailScreen({ route }: Props) {
               <Text style={st.verMapaTxt}>Ver en el mapa</Text>
             </TouchableOpacity>
           </View>
-          <MapaMini lat={animal.ubicacion.lat} lng={animal.ubicacion.lng} dentro={animal.dentroDeCerca} />
+          {animal.ubicacion && (
+            <MapaMini lat={animal.ubicacion.lat} lng={animal.ubicacion.lng} dentro={!!animal.dentroDeCerca} />
+          )}
         </Seccion>
 
         {/* ── Información adicional ── */}
@@ -703,6 +756,13 @@ const st = StyleSheet.create({
 
   bateriaBarBg:   { height: 4, backgroundColor: C.borde, borderRadius: 2, marginTop: 2 },
   bateriaBarFill: { height: 4, borderRadius: 2 },
+
+  sinCollarWrap: {
+    alignItems: "center", justifyContent: "center",
+    paddingVertical: 28, gap: 8,
+  },
+  sinCollarTxt: { fontSize: 15, fontWeight: "700", color: C.txtSec },
+  sinCollarSub: { fontSize: 12, color: C.txtSec, textAlign: "center", paddingHorizontal: 16 },
 
   ubicacionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   ubicacionCoords: { fontSize: 11.5, color: C.txtSec, marginTop: 2 },
