@@ -91,10 +91,9 @@ function NuevaGeocercaModal({
       onGuardado?.();
       onCerrar();
       Alert.alert("✓ Geocerca creada", `"${nombre.trim()}" ha sido guardada en el servidor.`);
-    } catch {
-      limpiar();
-      onCerrar();
-      Alert.alert("Sin conexión", `"${nombre.trim()}" se creará cuando haya conexión al servidor.`);
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? e?.message ?? "Error desconocido";
+      Alert.alert("Error al guardar", msg);
     } finally {
       setGuardando(false);
     }
