@@ -61,6 +61,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isLoaded || !isSignedIn) return;
 
     (async () => {
+      // Get token first — it must be ready before any authenticated API call
+      const token = await getToken();
+      if (!token) return;
+
       let fincaId = await AsyncStorage.getItem(FINCA_KEY);
 
       try {
@@ -71,15 +75,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await AsyncStorage.setItem(FINCA_KEY, fincaId);
           setFincaNombreCache(match.nombre);
         }
-      } catch {}
+      } catch (e: any) {
+        console.warn("[AuthContext] FincaAPI.listar failed:", e?.response?.status, e?.message);
+      }
 
       if (fincaId) setFincaIdCache(fincaId);
 
-      const token = await getToken();
-      if (token) {
-        conectarSocket(token);
-        if (fincaId) unirseAFinca(fincaId);
-      }
+      conectarSocket(token);
+      if (fincaId) unirseAFinca(fincaId);
     })();
   }, [isLoaded, isSignedIn]);
 
