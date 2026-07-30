@@ -79,6 +79,7 @@ export function useAnimals(opciones: UsarAnimalesOpciones = {}) {
   const { usuario } = useAuth();
   const [animales, setAnimales] = useState<Animal[]>(() => generarAnimalesDemo(10));
   const [cerca, setCerca] = useState<Cerca | null>(null);
+  const [cargandoCerca, setCargandoCerca] = useState(true);
   const [conectado, setConectado] = useState(true);
   const [ultimaSync, setUltimaSync] = useState<Date>(new Date());
   const destinosRef = useRef<Record<string, Coordenada>>({});
@@ -137,6 +138,7 @@ export function useAnimals(opciones: UsarAnimalesOpciones = {}) {
     const fincaId = usuario.fincaId;
 
     // Cargar geocerca activa
+    setCargandoCerca(true);
     CercasAPI.listar(fincaId)
       .then(({ data }) => {
         const activa = data.find((c) => c.activa) ?? data[0];
@@ -148,7 +150,8 @@ export function useAnimals(opciones: UsarAnimalesOpciones = {}) {
           });
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setCargandoCerca(false));
 
     cargarDesdeBackend(fincaId);
   }, [usuario?.fincaId, cargarDesdeBackend]);
@@ -287,5 +290,5 @@ export function useAnimals(opciones: UsarAnimalesOpciones = {}) {
     return () => clearInterval(intervalo);
   }, [intervaloMs, usarSimulacion, onNuevaAlerta, cerca]);
 
-  return { animales, conectado, ultimaSync, cerca, recargar };
+  return { animales, conectado, ultimaSync, cerca, cargandoCerca, recargar };
 }

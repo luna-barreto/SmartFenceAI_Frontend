@@ -57,7 +57,7 @@ function Divider({ marginVertical }: { marginVertical: number }) {
 export default function MapScreen() {
   const T = useT();
   const { usuario } = useAuth();
-  const { animales, conectado, cerca: cercaBackend, recargar: recargarContexto } = useAnimalsCtx();
+  const { animales, conectado, cerca: cercaBackend, cargandoCerca, recargar: recargarContexto } = useAnimalsCtx();
   const [busqueda, setBusqueda] = useState("");
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -71,10 +71,11 @@ export default function MapScreen() {
   );
 
   useEffect(() => {
+    if (cargandoCerca) return;
     const coords = cercaBackend?.coordenadas?.length ? cercaBackend.coordenadas : CERCA_DEMO;
     setCerca(coords);
     cercaIdRef.current = cercaBackend?.id;
-  }, [cercaBackend]);
+  }, [cercaBackend, cargandoCerca]);
 
   // GPS del browser
   const [ubicacionUsuario, setUbicacionUsuario] = useState<Coordenada | null>(null);
@@ -123,7 +124,10 @@ export default function MapScreen() {
         cercaIdRef.current = data.id;
       }
       recargarContexto();
-    } catch { /* sin backend: local only */ }
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? e?.message ?? "Error desconocido";
+      console.error("Error guardando geocerca:", msg);
+    }
     finally { setGuardando(false); }
   }, [usuario?.fincaId, ubicacionUsuario, recargarContexto]);
 

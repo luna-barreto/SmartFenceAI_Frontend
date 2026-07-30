@@ -8,6 +8,7 @@ interface AnimalsContextValue {
   conectado: boolean;
   ultimaSync: Date;
   cerca: Cerca | null;
+  cargandoCerca: boolean;
   alertas: Alerta[];
   recargar: () => void;
 }
@@ -17,6 +18,7 @@ const AnimalsContext = createContext<AnimalsContextValue>({
   conectado: false,
   ultimaSync: new Date(),
   cerca: null,
+  cargandoCerca: true,
   alertas: [],
   recargar: () => undefined,
 });
@@ -29,10 +31,10 @@ export function AnimalsProvider({ children }: { children: React.ReactNode }) {
       sonarAlarma();
     }
   }, []);
-  const { animales, conectado, ultimaSync, cerca, recargar } = useAnimals({ onNuevaAlerta });
+  const { animales, conectado, ultimaSync, cerca, cargandoCerca, recargar } = useAnimals({ onNuevaAlerta });
 
   return (
-    <AnimalsContext.Provider value={{ animales, conectado, ultimaSync, cerca, alertas, recargar }}>
+    <AnimalsContext.Provider value={{ animales, conectado, ultimaSync, cerca, cargandoCerca, alertas, recargar }}>
       {children}
     </AnimalsContext.Provider>
   );

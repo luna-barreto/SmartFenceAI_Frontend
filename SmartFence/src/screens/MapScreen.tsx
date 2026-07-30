@@ -184,7 +184,7 @@ export default function MapScreen() {
   const { usuario } = useAuth();
   const nombreFinca = usuario?.finca ?? "Mi finca";
 
-  const { animales, cerca: cercaBackend, recargar: recargarContexto } = useAnimalsCtx();
+  const { animales, cerca: cercaBackend, cargandoCerca, recargar: recargarContexto } = useAnimalsCtx();
 
   // Usa la geocerca real del backend; CERCA_DEMO solo si no hay backend todavía
   const hayGeocercaReal = !!cercaBackend?.coordenadas?.length;
@@ -221,13 +221,16 @@ export default function MapScreen() {
 
   // Cuando llega el GPS por primera vez y no hay geocerca real, recentrar la
   // cerca demo en la ubicación actual para que sea visible en el mapa.
+  // Espera a que la carga del backend termine antes de generar el cuadrado,
+  // para no sobreescribir una geocerca real que todavía está en vuelo.
   useEffect(() => {
+    if (cargandoCerca) return;                 // esperar a que el backend responda
     if (hayGeocercaReal) return;               // ya hay geocerca del backend
     if (cercaRecentradaRef.current) return;    // ya se recentró antes
     if (!ubicacionUsuario) return;
     cercaRecentradaRef.current = true;
     setCerca(generarPoligonoCentrado(ubicacionUsuario, 300));
-  }, [ubicacionUsuario, hayGeocercaReal]);
+  }, [ubicacionUsuario, hayGeocercaReal, cargandoCerca]);
 
   useEffect(() => {
     let unsub: (() => void) | null = null;
@@ -331,8 +334,9 @@ export default function MapScreen() {
         recargarContexto();
       }
       setEditando(false);
-    } catch {
-      Alert.alert("Sin conexión", "No se pudo guardar. Intenta de nuevo cuando haya conexión.");
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? e?.message ?? "Error desconocido";
+      Alert.alert("Error al guardar", msg);
     } finally {
       setGuardandoCerca(false);
     }
