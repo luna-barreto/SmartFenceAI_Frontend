@@ -731,27 +731,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
       }
     });
 
-    // Puente de mensajes: soporta WebView nativo y web iframe
-    function enviarMensaje(msg) {
-      var s = JSON.stringify(msg);
-      if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(s);
-      } else {
-        window.parent.postMessage(s, '*');
-      }
-    }
-    window.addEventListener('message', function(e) {
-      try {
-        var cmd = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-        if      (cmd.tipo === 'actualizarCerca')           window.actualizarCerca          && window.actualizarCerca(cmd.coords);
-        else if (cmd.tipo === 'actualizarAnimales')        window.actualizarAnimales        && window.actualizarAnimales(cmd.animales);
-        else if (cmd.tipo === 'setEditando')               window.setEditando               && window.setEditando(cmd.valor);
-        else if (cmd.tipo === 'moverVista')                window.moverVista                && window.moverVista(cmd.lat, cmd.lng, cmd.zoom);
-        else if (cmd.tipo === 'actualizarUbicacionUsuario') window.actualizarUbicacionUsuario && window.actualizarUbicacionUsuario(cmd.lat, cmd.lng);
-        else if (cmd.tipo === 'centerarEnUsuario')         window.centerarEnUsuario         && window.centerarEnUsuario();
-      } catch(err) {}
-    });
-
     let cercaCoords = [];
     let animalesData = [];
     let modoEdicion = false;
@@ -766,7 +745,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       poligonoLayer = L.polygon(cercaCoords, {
         color: '#76C043', weight: 2.5,
         fillColor: '#9CD15B', fillOpacity: 0.18,
-        dashArray: modoEdicion ? '8 4' : undefined,
+        dashArray: modoEdicion ? '8 4' : null,
       }).addTo(mapa);
       const fueraAnimales = animalesData.filter(a => !a.dentroDeCerca && a.ubicacion);
       if (fueraAnimales.length > 0) {
@@ -793,14 +772,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
         const m = L.marker(pt, { icon: icono, draggable: true }).addTo(mapa);
         m.on('drag', (e) => { const ll = e.target.getLatLng(); cercaCoords[i] = [ll.lat, ll.lng]; dibujarCerca(); });
         m.on('dragend', () => {
-          enviarMensaje({ tipo: 'cerca_actualizada', puntos: cercaCoords });
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'cerca_actualizada', puntos: cercaCoords }));
         });
         verticeMarkers.push(m);
       });
     }
 
     function colorMarker(a) {
-      if (!a.collar || a.collar.estado === 'fuera_de_rango' || a.collar.estado === 'sin_señal') return '#6B7280';
+      if (!a.collar || a.collar.estado === 'fuera_de_rango' || a.collar.estado === 'sin_ñal') return '#6B7280';
       const bat = a.collar.bateriaPorcentaje != null ? a.collar.bateriaPorcentaje : (a.collar.bateria != null ? a.collar.bateria : 100);
       if (bat <= 20) return '#F59E0B';
       return a.dentroDeCerca ? '#43A047' : '#EF4444';
@@ -850,7 +829,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
           const m = L.marker([a.ubicacion.lat, a.ubicacion.lng], { icon: icono }).addTo(mapa);
           m.bindTooltip(makeTooltip(a), { direction: 'top', offset: [0, -20] });
           m.on('click', () => {
-            enviarMensaje({ tipo: 'animal_click', id: a.id });
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'animal_click', id: a.id }));
           });
           marcadores[a.id] = m;
         }
@@ -898,9 +877,12 @@ svg.leaflet-image-layer.leaflet-interactive path {
     window.setEditando = (val) => { modoEdicion = val; dibujarCerca(); dibujarVertices(); };
     window.actualizarAnimales = pintarAnimales;
 
-    // Notificar que el mapa está listo
-    window.addEventListener('load', function() { enviarMensaje({ tipo: 'listo' }); });
-    enviarMensaje({ tipo: 'listo' });
+    // Notificar a React Native que el mapa está listo
+    window.addEventListener('load', function() {
+      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'listo' }));
+    });
+    // También notificar inline (por si load ya disparó)
+    window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'listo' }));
   </script>
 </body>
 </html>

@@ -12,7 +12,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "co.smartfence.ai",
       "adaptiveIcon": {
@@ -34,7 +36,9 @@
       "bundleIdentifier": "co.smartfence.ai",
       "supportsTablet": true,
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "NSUserNotificationsUsageDescription": "SmartFence AI te notifica cuando tus animales salen del perímetro, cuando la batería del collar es baja o cuando hay algún problema con los dispositivos."
       }
     },
@@ -54,7 +58,8 @@
           "androidMode": "default",
           "androidCollapsedTitle": "#{unread_notifications} nuevas alertas"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "apiUrl": "https://improved-space-goldfish-696q5j646x5gfr47j-4000.app.github.dev/api",
