@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Switch,
@@ -35,10 +35,14 @@ export default function SettingsScreenWeb() {
   const { conectado } = useAnimals();
   const { habilitadas: notifPush, setHabilitadas: setNotifPush } = useNotificationsCtx();
 
-  const [nombreFinca, setNombreFinca] = useState(usuario?.finca ?? "Finca El Paraíso");
+  const [nombreFinca, setNombreFinca] = useState(usuario?.finca ?? "");
   const [intervalo,   setIntervalo]   = useState(4);
   const [notifCorreo, setNotifCorreo] = useState(true);
   const [activeTab,   setActiveTab]   = useState("General");
+
+  useEffect(() => {
+    if (usuario?.finca) setNombreFinca(usuario.finca);
+  }, [usuario?.finca]);
 
   // ── rightContent for WebTopBar ──
   const rightContent = (

@@ -32,6 +32,7 @@ export const AuthAPI = {
 
 // ── Finca ─────────────────────────────────────────────────────────────────────
 export const FincaAPI = {
+  listar: () => api.get<{ id: string; nombre: string }[]>("/fincas"),
   actualizar: (id: string, data: { nombre?: string }) =>
     api.put<{ id: string; nombre: string }>(`/fincas/${id}`, data),
 };

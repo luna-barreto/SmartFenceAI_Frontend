@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, Switch,
   StyleSheet, Platform, StatusBar, Image,
@@ -233,10 +233,14 @@ export default function SettingsScreen() {
     setReporteDiario: setNotifReporte,
   } = useNotificationsCtx();
 
-  const [nombreFinca,  setNombreFinca]  = useState(usuario?.finca      ?? "Finca El Paraíso");
+  const [nombreFinca,  setNombreFinca]  = useState(usuario?.finca      ?? "");
   const [intervalo,    setIntervalo]    = useState(4);
   const [notifSms,     setNotifSms]     = useState(false);
   const [editFinca,    setEditFinca]    = useState(false);
+
+  useEffect(() => {
+    if (usuario?.finca) setNombreFinca(usuario.finca);
+  }, [usuario?.finca]);
 
   async function guardarFinca(val: string): Promise<void> {
     setNombreFinca(val);

@@ -26,6 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [fincaIdCache, setFincaIdCache] = useState<string | null>(null);
+  const [fincaNombreCache, setFincaNombreCache] = useState<string | null>(null);
 
   // Expose Clerk's getToken to the axios interceptor
   useEffect(() => {
@@ -50,22 +51,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       correo: user.primaryEmailAddress?.emailAddress ?? "",
       rol: (meta.rol as Usuario["rol"]) ?? "GANADERO",
       fincaId: fincaIdCache ?? undefined,
+      finca: fincaNombreCache ?? undefined,
     };
     setUsuario(u);
-  }, [isLoaded, isSignedIn, user, fincaIdCache]);
+  }, [isLoaded, isSignedIn, user, fincaIdCache, fincaNombreCache]);
 
-  // After sign-in: restore fincaId from cache + connect socket
+  // After sign-in: restore fincaId from cache (or fetch from backend) + connect socket
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
 
     (async () => {
-      const cached = await AsyncStorage.getItem(FINCA_KEY);
-      if (cached) setFincaIdCache(cached);
+      let fincaId = await AsyncStorage.getItem(FINCA_KEY);
+
+      try {
+        const { data } = await FincaAPI.listar();
+        if (data.length > 0) {
+          const match = fincaId ? data.find((f) => f.id === fincaId) ?? data[0] : data[0];
+          fincaId = match.id;
+          await AsyncStorage.setItem(FINCA_KEY, fincaId);
+          setFincaNombreCache(match.nombre);
+        }
+      } catch {}
+
+      if (fincaId) setFincaIdCache(fincaId);
 
       const token = await getToken();
       if (token) {
         conectarSocket(token);
-        if (cached) unirseAFinca(cached);
+        if (fincaId) unirseAFinca(fincaId);
       }
     })();
   }, [isLoaded, isSignedIn]);
