@@ -31,6 +31,7 @@ import WebSidebar from "@components/WebSidebar";
 import WebTopBar from "@components/WebTopBar";
 import MapaOSM, { MapaOSMHandle } from "@components/MapaOSM";
 import { CercasAPI } from "@services/api";
+import { useAuth } from "@context/AuthContext";
 
 // ─── Demo animal rows shown when animales is empty ────────────────────────────
 const DEMO_NAMES = [
@@ -55,6 +56,7 @@ function Divider({ marginVertical }: { marginVertical: number }) {
 // ─── MapScreen (web) ──────────────────────────────────────────────────────────
 export default function MapScreen() {
   const T = useT();
+  const { usuario } = useAuth();
   const { animales, conectado, cerca: cercaBackend, recargar: recargarContexto } = useAnimalsCtx();
   const [busqueda, setBusqueda] = useState("");
   const [editando, setEditando] = useState(false);
@@ -100,19 +102,30 @@ export default function MapScreen() {
     ? (ubicacionUsuario ?? centroDe(cerca.length ? cerca : CERCA_DEMO))
     : centroDe(cerca);
 
-  // Recibe coords al soltar un vértice — actualiza estado local, NO sale del modo edición
+  // Recibe coords al soltar un vértice — guarda inmediatamente (crea si aún no existe)
   const guardarCerca = useCallback(async (pts: Coordenada[]) => {
     setCerca(pts);
-    const id = cercaIdRef.current;
-    if (!id) return;
+    const fincaId = usuario?.fincaId;
+    if (!fincaId || fincaId === "demo") return;
     setGuardando(true);
     try {
-      await CercasAPI.actualizar(id, { coordenadas: pts });
+      const id = cercaIdRef.current;
+      if (id) {
+        await CercasAPI.actualizar(id, { coordenadas: pts });
+      } else {
+        const { data } = await CercasAPI.crear({
+          fincaId,
+          nombre: "Geocerca principal",
+          coordenadas: pts,
+          latitudDispositivo: ubicacionUsuario?.lat,
+          longitudDispositivo: ubicacionUsuario?.lng,
+        });
+        cercaIdRef.current = data.id;
+      }
       recargarContexto();
-    }
-    catch { /* sin backend: local only */ }
+    } catch { /* sin backend: local only */ }
     finally { setGuardando(false); }
-  }, [recargarContexto]);
+  }, [usuario?.fincaId, ubicacionUsuario, recargarContexto]);
 
   function iniciarEdicion() {
     cercaSnapshotRef.current = cerca;
