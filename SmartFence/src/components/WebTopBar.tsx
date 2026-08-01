@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  useWindowDimensions,
 } from "react-native";
 import { Bell } from "lucide-react-native";
 import { useT } from "@context/ThemeContext";
@@ -29,6 +30,8 @@ export default function WebTopBar({
 }: WebTopBarProps) {
   const T = useT();
   const { usuario } = useAuth();
+  const { width } = useWindowDimensions();
+  const isSm = width < 640;
 
   const iniciales = (usuario?.nombre ?? "U")
     .split(" ")
@@ -41,15 +44,16 @@ export default function WebTopBar({
     <View
       style={[
         st.bar,
+        isSm && st.barSm,
         { backgroundColor: T.header, borderBottomColor: T.borde },
       ]}
     >
       {/* ── Left: title + subtitle ── */}
       <View style={st.titleWrap}>
-        <Text style={[st.titulo, { color: T.txtMain }]} numberOfLines={1}>
+        <Text style={[st.titulo, isSm && st.tituloSm, { color: T.txtMain }]} numberOfLines={1}>
           {titulo}
         </Text>
-        {sub ? (
+        {sub && !isSm ? (
           <Text style={[st.sub, { color: T.txtSec }]} numberOfLines={1}>
             {sub}
           </Text>
@@ -59,28 +63,30 @@ export default function WebTopBar({
       {/* ── Spacer ── */}
       <View style={st.spacer} />
 
-      {/* ── Connected status badge ── */}
-      <View
-        style={[
-          st.badge,
-          { backgroundColor: conectado ? T.verdeMuy : T.rojoBg },
-        ]}
-      >
+      {/* ── Connected status badge — hidden on small screens ── */}
+      {!isSm && (
         <View
           style={[
-            st.badgeDot,
-            { backgroundColor: conectado ? T.verde : T.rojo },
-          ]}
-        />
-        <Text
-          style={[
-            st.badgeTxt,
-            { color: conectado ? T.verde : T.rojo },
+            st.badge,
+            { backgroundColor: conectado ? T.verdeMuy : T.rojoBg },
           ]}
         >
-          {conectado ? "Conectado" : "Sin señal"}
-        </Text>
-      </View>
+          <View
+            style={[
+              st.badgeDot,
+              { backgroundColor: conectado ? T.verde : T.rojo },
+            ]}
+          />
+          <Text
+            style={[
+              st.badgeTxt,
+              { color: conectado ? T.verde : T.rojo },
+            ]}
+          >
+            {conectado ? "Conectado" : "Sin señal"}
+          </Text>
+        </View>
+      )}
 
       {/* ── Bell button ── */}
       <TouchableOpacity
@@ -98,8 +104,8 @@ export default function WebTopBar({
         )}
       </TouchableOpacity>
 
-      {/* ── rightContent slot ── */}
-      {rightContent ?? null}
+      {/* ── rightContent slot — hidden on small screens ── */}
+      {!isSm && (rightContent ?? null)}
 
       {/* ── User avatar ── */}
       <View style={[st.avatar, { backgroundColor: T.verdeOscuro }]}>
@@ -121,14 +127,23 @@ const st = StyleSheet.create({
     gap: 16,
     borderBottomWidth: 1,
   },
+  barSm: {
+    paddingHorizontal: 14,
+    gap: 10,
+  },
 
   // Title
   titleWrap: {
     justifyContent: "center",
+    flex: 1,
+    minWidth: 0,
   },
   titulo: {
     fontSize: 18,
     fontWeight: "800",
+  },
+  tituloSm: {
+    fontSize: 15,
   },
   sub: {
     fontSize: 12,

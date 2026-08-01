@@ -7,6 +7,7 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  useWindowDimensions,
 } from "react-native";
 import {
   Plus,
@@ -20,11 +21,12 @@ import {
   Pencil,
   X,
   Check,
+  MapPin,
 } from "lucide-react-native";
 import { useT } from "@context/ThemeContext";
 import { CERCA_DEMO } from "@hooks/useAnimals";
 import { useAnimalsCtx } from "@context/AnimalsContext";
-import { centroDe, generarPoligonoCentrado } from "@utils/geo";
+import { centroDe, generarPoligonoCentrado, translatePolygon } from "@utils/geo";
 import { Coordenada } from "@/types";
 import { navigateTo } from "@navigation/navigationRef";
 import WebSidebar from "@components/WebSidebar";
@@ -58,12 +60,16 @@ export default function MapScreen() {
   const T = useT();
   const { usuario } = useAuth();
   const { animales, conectado, cerca: cercaBackend, cargandoCerca, recargar: recargarContexto } = useAnimalsCtx();
+  const { width } = useWindowDimensions();
+  const isMd = width < 1100;
+  const isSm = width < 768;
   const [busqueda, setBusqueda] = useState("");
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const mapaRef = useRef<MapaOSMHandle>(null);
   const cercaIdRef = useRef<string | undefined>(cercaBackend?.id);
   const cercaSnapshotRef = useRef<Coordenada[]>([]);
+  const bloqueandoSyncRef = useRef(false);
 
   // Inicializar desde el contexto para no mostrar CERCA_DEMO al volver a la pantalla
   const [cerca, setCerca] = useState<Coordenada[]>(
@@ -72,6 +78,7 @@ export default function MapScreen() {
 
   useEffect(() => {
     if (cargandoCerca) return;
+    if (bloqueandoSyncRef.current) return; // no pisar edición local
     const coords = cercaBackend?.coordenadas?.length ? cercaBackend.coordenadas : CERCA_DEMO;
     setCerca(coords);
     cercaIdRef.current = cercaBackend?.id;
@@ -103,42 +110,76 @@ export default function MapScreen() {
     ? (ubicacionUsuario ?? centroDe(cerca.length ? cerca : CERCA_DEMO))
     : centroDe(cerca);
 
-  // Recibe coords al soltar un vértice — guarda inmediatamente (crea si aún no existe)
-  const guardarCerca = useCallback(async (pts: Coordenada[]) => {
+  // Solo actualiza estado local mientras el usuario arrastra vértices.
+  // El guardado real ocurre únicamente al presionar "Guardar".
+  function guardarCerca(pts: Coordenada[]) {
     setCerca(pts);
+  }
+
+  function iniciarEdicion() {
+    cercaSnapshotRef.current = cerca;
+    bloqueandoSyncRef.current = true;
+    setEditando(true);
+  }
+
+  function cancelarEdicion() {
+    bloqueandoSyncRef.current = false;
+    setCerca(cercaSnapshotRef.current);
+    setEditando(false);
+  }
+
+  async function confirmarGuardado() {
     const fincaId = usuario?.fincaId;
-    if (!fincaId || fincaId === "demo") return;
+    if (!fincaId || fincaId === "demo") { setEditando(false); return; }
     setGuardando(true);
     try {
       const id = cercaIdRef.current;
       if (id) {
-        await CercasAPI.actualizar(id, { coordenadas: pts });
+        await CercasAPI.actualizar(id, { coordenadas: cerca });
       } else {
         const { data } = await CercasAPI.crear({
           fincaId,
           nombre: "Geocerca principal",
-          coordenadas: pts,
-          latitudDispositivo: ubicacionUsuario?.lat,
-          longitudDispositivo: ubicacionUsuario?.lng,
+          coordenadas: cerca,
+        });
+        cercaIdRef.current = data.id;
+      }
+      setEditando(false);
+      bloqueandoSyncRef.current = false;
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? e?.message ?? "Error desconocido";
+      console.error("Error guardando geocerca:", msg);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function moverCercaAMiUbicacion() {
+    if (!ubicacionUsuario) return;
+    const fincaId = usuario?.fincaId;
+    if (!fincaId || fincaId === "demo") return;
+    const oldCenter = centroDe(cerca);
+    const nuevaCerca = translatePolygon(cerca, oldCenter, ubicacionUsuario);
+    setCerca(nuevaCerca);
+    setGuardando(true);
+    try {
+      const id = cercaIdRef.current;
+      if (id) {
+        await CercasAPI.actualizar(id, { coordenadas: nuevaCerca });
+      } else {
+        const { data } = await CercasAPI.crear({
+          fincaId,
+          nombre: "Geocerca principal",
+          coordenadas: nuevaCerca,
         });
         cercaIdRef.current = data.id;
       }
       recargarContexto();
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? "Error desconocido";
-      console.error("Error guardando geocerca:", msg);
+      console.error("Error moviendo geocerca:", e?.message);
+    } finally {
+      setGuardando(false);
     }
-    finally { setGuardando(false); }
-  }, [usuario?.fincaId, ubicacionUsuario, recargarContexto]);
-
-  function iniciarEdicion() {
-    cercaSnapshotRef.current = cerca;
-    setEditando(true);
-  }
-
-  function cancelarEdicion() {
-    setCerca(cercaSnapshotRef.current);
-    setEditando(false);
   }
 
   const dentroCount = animales.length
@@ -223,10 +264,12 @@ export default function MapScreen() {
         {/* ── Content row ── */}
         <View style={st.content}>
 
-          {/* ── LEFT PANEL ── */}
+          {/* ── LEFT PANEL — hidden on small screens ── */}
+          {!isSm && (
           <View
             style={[
               st.leftPanel,
+              isMd && st.leftPanelMd,
               { backgroundColor: T.card, borderRightColor: T.borde },
             ]}
           >
@@ -348,6 +391,7 @@ export default function MapScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          )}
 
           {/* ── CENTER MAP ── */}
           <View style={st.mapArea}>
@@ -363,20 +407,49 @@ export default function MapScreen() {
 
             {/* Botones de edición */}
             {!editando ? (
-              <TouchableOpacity
-                style={[st.btnEditar, { backgroundColor: T.card, borderColor: T.borde }]}
-                onPress={iniciarEdicion}
-                activeOpacity={0.85}
-              >
-                <Pencil size={14} color={T.txtMain} strokeWidth={2} />
-                <Text style={[st.btnEditarTxt, { color: T.txtMain }]}>Editar cerca</Text>
-              </TouchableOpacity>
+              <View style={st.mapActionsRow}>
+                <TouchableOpacity
+                  style={[st.btnEditar, { backgroundColor: T.card, borderColor: T.borde }]}
+                  onPress={iniciarEdicion}
+                  activeOpacity={0.85}
+                >
+                  <Pencil size={14} color={T.txtMain} strokeWidth={2} />
+                  <Text style={[st.btnEditarTxt, { color: T.txtMain }]}>Editar cerca</Text>
+                </TouchableOpacity>
+                {ubicacionUsuario && (
+                  <TouchableOpacity
+                    style={[st.btnMover, { backgroundColor: T.card, borderColor: T.borde }]}
+                    onPress={moverCercaAMiUbicacion}
+                    activeOpacity={0.85}
+                    disabled={guardando}
+                  >
+                    <MapPin size={14} color={T.verde} strokeWidth={2} />
+                    <Text style={[st.btnMoverTxt, { color: T.verde }]}>Mover cerca a mi ubicación</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             ) : (
               <View style={st.editBannerWeb}>
                 <View style={[st.editBannerInner, { backgroundColor: T.verdeOscuro }]}>
-                  <Text style={st.editBannerTxt}>Mueve los vértices para editar · Se guardará al soltar</Text>
-                  <TouchableOpacity onPress={cancelarEdicion} activeOpacity={0.8}>
-                    <X size={16} color="#fff" strokeWidth={2.5} />
+                  <Text style={st.editBannerTxt}>Arrastra los puntos para editar</Text>
+                  <TouchableOpacity
+                    style={st.editCancelBtn}
+                    onPress={cancelarEdicion}
+                    activeOpacity={0.8}
+                    disabled={guardando}
+                  >
+                    <Text style={st.editCancelTxt}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[st.editSaveBtn, guardando && { opacity: 0.6 }]}
+                    onPress={confirmarGuardado}
+                    activeOpacity={0.8}
+                    disabled={guardando}
+                  >
+                    {guardando
+                      ? <ActivityIndicator size="small" color={T.verdeOscuro} />
+                      : <><Check size={13} color={T.verdeOscuro} strokeWidth={3} /><Text style={[st.editSaveTxt, { color: T.verdeOscuro }]}>Guardar</Text></>
+                    }
                   </TouchableOpacity>
                 </View>
               </View>
@@ -405,10 +478,12 @@ export default function MapScreen() {
             </View>
           </View>
 
-          {/* ── RIGHT PANEL ── */}
+          {/* ── RIGHT PANEL — hidden on small screens ── */}
+          {!isSm && (
           <View
             style={[
               st.rightPanel,
+              isMd && st.rightPanelMd,
               { backgroundColor: T.card, borderLeftColor: T.borde },
             ]}
           >
@@ -559,6 +634,7 @@ export default function MapScreen() {
               })}
             </ScrollView>
           </View>
+          )}
         </View>
       </View>
     </View>
@@ -706,6 +782,9 @@ const st = StyleSheet.create({
     width: 280,
     borderRightWidth: 1,
     flexDirection: "column",
+  },
+  leftPanelMd: {
+    width: 220,
   },
   leftScroll: {
     paddingHorizontal: 18,
@@ -860,6 +939,10 @@ const st = StyleSheet.create({
     paddingTop: 18,
     flexDirection: "column",
   },
+  rightPanelMd: {
+    width: 220,
+    paddingHorizontal: 12,
+  },
   rightHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -973,11 +1056,14 @@ const st = StyleSheet.create({
     fontSize: 10,
   },
 
-  // Edit fence button (floating bottom-left of map)
-  btnEditar: {
+  // Floating action row (bottom-left of map)
+  mapActionsRow: {
     position: "absolute",
     bottom: 56,
     left: 14,
+    gap: 8,
+  },
+  btnEditar: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -992,6 +1078,21 @@ const st = StyleSheet.create({
     elevation: 4,
   },
   btnEditarTxt: { fontSize: 12, fontWeight: "700" },
+  btnMover: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  btnMoverTxt: { fontSize: 12, fontWeight: "700" },
 
   // Edit mode banner (top of map)
   editBannerWeb: {
@@ -1007,7 +1108,19 @@ const st = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
   },
-  editBannerTxt: { fontSize: 12, color: "#fff", fontWeight: "600", flex: 1, marginRight: 8 },
+  editBannerTxt: { fontSize: 12, color: "#fff", fontWeight: "600", flex: 1 },
+  editCancelBtn: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5,
+    marginLeft: 8,
+  },
+  editCancelTxt: { fontSize: 12, color: "#fff", fontWeight: "700" },
+  editSaveBtn: {
+    backgroundColor: "#fff",
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5,
+    flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 6,
+  },
+  editSaveTxt: { fontSize: 12, fontWeight: "800" },
 
   // Saving badge
   savingBadge: {

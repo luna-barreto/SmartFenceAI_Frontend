@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Switch,
+  ScrollView, Switch, useWindowDimensions,
 } from "react-native";
 import {
   Bell, BellRing, CheckCircle2, ChevronDown, Clock,
@@ -39,6 +39,10 @@ export default function SettingsScreenWeb() {
   const [intervalo,   setIntervalo]   = useState(4);
   const [notifCorreo, setNotifCorreo] = useState(true);
   const [activeTab,   setActiveTab]   = useState("General");
+
+  const { width } = useWindowDimensions();
+  const isMd = width < 1100;
+  const isSm = width < 768;
 
   useEffect(() => {
     if (usuario?.finca) setNombreFinca(usuario.finca);
@@ -78,6 +82,11 @@ export default function SettingsScreenWeb() {
           showsVerticalScrollIndicator={false}
         >
           {/* ── Tab navigation row ── */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={isSm ? { marginBottom: -1 } : undefined}
+          >
           <View style={[s.tabRow, { borderBottomColor: T.borde }]}>
             {TABS.map(({ key, label, Icon }) => {
               const isActive = activeTab === key;
@@ -109,6 +118,7 @@ export default function SettingsScreenWeb() {
               );
             })}
           </View>
+          </ScrollView>
 
           {/* ── Content ── */}
           {activeTab !== "General" ? (
@@ -116,7 +126,7 @@ export default function SettingsScreenWeb() {
               <Text style={[s.proximamenteTxt, { color: T.txtSec }]}>Próximamente</Text>
             </View>
           ) : (
-            <View style={s.columns}>
+            <View style={[s.columns, isMd && { flexDirection: "column" }]}>
               {/* ── LEFT COLUMN ── */}
               <View style={s.colLeft}>
 
@@ -197,7 +207,7 @@ export default function SettingsScreenWeb() {
               </View>
 
               {/* ── RIGHT COLUMN ── */}
-              <View style={s.colRight}>
+              <View style={[s.colRight, isMd && { width: "100%" }]}>
 
                 {/* Notificaciones */}
                 <View style={[s.card, { backgroundColor: T.card, borderColor: T.borde }]}>

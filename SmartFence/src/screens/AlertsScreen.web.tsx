@@ -405,8 +405,9 @@ export default function AlertsScreen() {
             </View>
           </ScrollView>
 
-          {/* ── RIGHT PANEL ── */}
-          <View style={[st.rightPanel, { backgroundColor: T.card, borderLeftColor: T.borde }]}>
+          {/* ── RIGHT PANEL — hidden on small screens ── */}
+          {!isSm && (
+          <View style={[st.rightPanel, isMd && st.rightPanelMd, { backgroundColor: T.card, borderLeftColor: T.borde }]}>
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={st.rightPanelContent}
@@ -470,6 +471,7 @@ export default function AlertsScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
+          )}
 
         </View>
       </View>
@@ -648,6 +650,9 @@ const st = StyleSheet.create({
   rightPanel: {
     width: 260,
     borderLeftWidth: 1,
+  },
+  rightPanelMd: {
+    width: 220,
   },
   rightPanelContent: {
     paddingHorizontal: 18,

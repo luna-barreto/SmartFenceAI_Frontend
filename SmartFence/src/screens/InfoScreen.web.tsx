@@ -166,7 +166,7 @@ export default function InfoScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* ── HERO CARD ── */}
-          <View style={[st.heroCard, { backgroundColor: T.card, borderColor: T.borde }]}>
+          <View style={[st.heroCard, !isDesktop && { flexDirection: "column" }, { backgroundColor: T.card, borderColor: T.borde }]}>
             {/* Columna izquierda */}
             <View style={st.heroLeft}>
               <View style={st.heroIconRow}>
@@ -207,7 +207,7 @@ export default function InfoScreen() {
               </View>
             </View>
             {/* Columna derecha — imagen */}
-            <View style={st.heroRight}>
+            <View style={[st.heroRight, !isDesktop && { width: "100%", minWidth: 0, height: 180 }]}>
               <Image
                 source={require("../../assets/Vaca.png")}
                 style={st.heroImg}
@@ -223,7 +223,7 @@ export default function InfoScreen() {
             {/* ¿Cómo funciona? */}
             <View style={[st.seccion, st.midLeft, { backgroundColor: T.card, borderColor: T.borde }]}>
               <Text style={[st.seccionTitulo, { color: T.txtMain }]}>¿Cómo funciona?</Text>
-              <View style={st.flujoRow}>
+              <View style={[st.flujoRow, !isDesktop && { flexWrap: "wrap" }]}>
                 <PasoFlujo num={1} icon={Cpu}        texto="El collar GPS LoRa obtiene la ubicación del animal." />
                 <PasoFlujo num={2} icon={LoRaIcon}   texto="Envía los datos al gateway LoRa instalado en la finca." />
                 <PasoFlujo num={3} icon={Wifi}       texto="El gateway sincroniza la información con la nube." />

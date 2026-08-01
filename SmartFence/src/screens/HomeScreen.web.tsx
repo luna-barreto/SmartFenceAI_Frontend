@@ -301,6 +301,7 @@ export default function HomeScreen() {
 
   const { width } = useWindowDimensions();
   const isMd = width < 1100;
+  const isSm = width < 640;
 
   return (
     <View style={[st.root, { backgroundColor: T.fondo }]}>
@@ -369,7 +370,7 @@ export default function HomeScreen() {
           </View>
 
           {/* ── Stats row ── */}
-          <View style={[st.statsRow, isMd && { flexWrap: "wrap" }]}>
+          <View style={[st.statsRow, isMd && { flexWrap: "wrap" }, isSm && { gap: 10 }]}>
             <StatCard
               T={T}
               icono={CowIcon as IconComp}
@@ -416,7 +417,7 @@ export default function HomeScreen() {
           <View style={[st.contentGrid, isMd && { flexDirection: "column" }]}>
 
             {/* Left column */}
-            <View style={st.leftCol}>
+            <View style={[st.leftCol, isSm && { flex: 1 }]}>
 
               {/* Módulos principales */}
               <View>
@@ -492,7 +493,7 @@ export default function HomeScreen() {
             </View>
 
             {/* Right column */}
-            <View style={st.rightCol}>
+            <View style={[st.rightCol, isMd && { width: "100%" }]}>
 
               {/* Resumen de hoy */}
               <View style={[st.card, { backgroundColor: T.card, borderColor: T.borde }]}>

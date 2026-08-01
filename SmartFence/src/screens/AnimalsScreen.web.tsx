@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TextInput,
   useWindowDimensions,
+  Platform,
 } from "react-native";
 import {
   Search,
@@ -219,7 +220,7 @@ export default function AnimalsScreen() {
 
   const { width } = useWindowDimensions();
   const isMd = width < 1100;
-  const isSm = width < 768;
+  const isSm = width < 900;
 
   return (
     <View style={[st.root, { backgroundColor: T.fondo }]}>
@@ -307,8 +308,13 @@ export default function AnimalsScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Table */}
-            <View style={[st.table, { backgroundColor: T.card, borderColor: T.borde }]}>
+            {/* Table — horizontal scroll on narrow screens */}
+            <ScrollView
+              horizontal={isSm}
+              showsHorizontalScrollIndicator={isSm}
+              style={isSm ? { marginBottom: 0 } : undefined}
+            >
+            <View style={[st.table, isSm && { minWidth: 800 }, { backgroundColor: T.card, borderColor: T.borde }]}>
               {/* Table header */}
               <View style={[st.tableHeader, { backgroundColor: T.cardElevada, borderBottomColor: T.borde }]}>
                 <TH label="ANIMAL" flex={2} />
@@ -348,10 +354,11 @@ export default function AnimalsScreen() {
                 T={T}
               />
             </View>
+            </ScrollView>
           </ScrollView>
 
-          {/* Right panel */}
-          <RightFiltersPanel T={T} enriched={enriched} />
+          {/* Right panel — hidden on small screens */}
+          {!isSm && <RightFiltersPanel T={T} enriched={enriched} />}
         </View>
       </View>
     </View>

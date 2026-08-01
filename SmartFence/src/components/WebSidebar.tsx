@@ -64,6 +64,7 @@ export default function WebSidebar({ activeRoute }: WebSidebarProps) {
   const { width } = useWindowDimensions();
 
   const collapsed = width < 1100;
+  const hidden = width < 640;
 
   const iniciales = (usuario?.nombre ?? "U")
     .split(" ")
@@ -71,6 +72,8 @@ export default function WebSidebar({ activeRoute }: WebSidebarProps) {
     .map((p) => p[0])
     .join("")
     .toUpperCase();
+
+  if (hidden) return null;
 
   return (
     <View
