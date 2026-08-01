@@ -15,7 +15,7 @@ config.cacheStores = [
   }),
 ];
 
-// Limitar workers para reducir uso de RAM en primera compilación
-config.maxWorkers = 2;
+// 4 workers — balance entre velocidad de compilación y uso de RAM
+config.maxWorkers = 4;
 
 module.exports = withNativeWind(config, { input: "./src/styles/global.css" });
