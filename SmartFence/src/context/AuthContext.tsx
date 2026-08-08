@@ -5,8 +5,10 @@ import { Usuario } from "@/types";
 import { FincaAPI } from "@/services/api";
 import { conectarSocket, desconectarSocket, unirseAFinca } from "@/services/socket";
 import { clerkTokenRef } from "@/services/clerkTokenRef";
+import { registrarTokenPushEnBackend } from "@notifications/notificationService";
 
 const FINCA_KEY = "sf_finca_id";
+const FINCA_NOMBRE_KEY = "sf_finca_nombre";
 
 interface AuthContextType {
   usuario: Usuario | null;
@@ -28,10 +30,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [fincaIdCache, setFincaIdCache] = useState<string | null>(null);
   const [fincaNombreCache, setFincaNombreCache] = useState<string | null>(null);
 
-  // Expose Clerk's getToken to the axios interceptor
+  // Expose Clerk's getToken to the axios interceptor.
+  // No cleanup — the ref should always point to the latest getToken, never to null,
+  // to avoid a race where the interceptor runs between cleanup and re-assignment.
   useEffect(() => {
     clerkTokenRef.getToken = () => getToken();
-    return () => { clerkTokenRef.getToken = null; };
   }, [getToken]);
 
   // Build the usuario object whenever Clerk's user changes
@@ -66,6 +69,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!token) return;
 
       let fincaId = await AsyncStorage.getItem(FINCA_KEY);
+      const cachedNombre = await AsyncStorage.getItem(FINCA_NOMBRE_KEY);
+
+      // Mostrar finca guardada localmente de inmediato, sin esperar al API
+      if (fincaId) setFincaIdCache(fincaId);
+      if (cachedNombre) setFincaNombreCache(cachedNombre);
 
       try {
         const { data } = await FincaAPI.listar();
@@ -73,16 +81,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const match = fincaId ? data.find((f) => f.id === fincaId) ?? data[0] : data[0];
           fincaId = match.id;
           await AsyncStorage.setItem(FINCA_KEY, fincaId);
+          await AsyncStorage.setItem(FINCA_NOMBRE_KEY, match.nombre);
           setFincaNombreCache(match.nombre);
+        } else {
+          // Usuario nuevo sin finca — crearla automáticamente
+          const { data: nueva } = await FincaAPI.clerkSync();
+          fincaId = nueva.id;
+          await AsyncStorage.setItem(FINCA_KEY, fincaId);
+          await AsyncStorage.setItem(FINCA_NOMBRE_KEY, nueva.nombre);
+          setFincaNombreCache(nueva.nombre);
         }
       } catch (e: any) {
-        console.warn("[AuthContext] FincaAPI.listar failed:", e?.response?.status, e?.message);
+        console.warn("[AuthContext] FincaAPI.listar/clerkSync failed:", e?.response?.status, e?.message);
       }
 
       if (fincaId) setFincaIdCache(fincaId);
 
       conectarSocket(token);
       if (fincaId) unirseAFinca(fincaId);
+
+      // Registrar token push ahora que el usuario está autenticado y el
+      // interceptor de Axios ya tiene el token de Clerk.
+      registrarTokenPushEnBackend();
     })();
   }, [isLoaded, isSignedIn]);
 
@@ -110,7 +130,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function cerrarSesion() {
     desconectarSocket();
     await AsyncStorage.removeItem(FINCA_KEY);
+    await AsyncStorage.removeItem(FINCA_NOMBRE_KEY);
     setFincaIdCache(null);
+    setFincaNombreCache(null);
     await clerk.signOut();
   }
 
@@ -125,8 +147,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unirseAFinca(campos.fincaId);
     }
 
-    if (campos.finca !== undefined && usuario.fincaId) {
-      FincaAPI.actualizar(usuario.fincaId, { nombre: campos.finca }).catch(() => {});
+    if (campos.finca !== undefined) {
+      setFincaNombreCache(campos.finca ?? null);
+      if (campos.finca) await AsyncStorage.setItem(FINCA_NOMBRE_KEY, campos.finca);
+      if (usuario.fincaId) {
+        FincaAPI.actualizar(usuario.fincaId, { nombre: campos.finca }).catch(() => {});
+      }
     }
   }
 

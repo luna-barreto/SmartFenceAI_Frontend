@@ -62,8 +62,8 @@
       "expo-web-browser"
     ],
     "extra": {
-      "apiUrl": "https://improved-space-goldfish-696q5j646x5gfr47j-4000.app.github.dev/api",
-      "socketUrl": "https://improved-space-goldfish-696q5j646x5gfr47j-4000.app.github.dev"
+      "apiUrl": "https://smart-fence-integration.up.railway.app/api",
+      "socketUrl": "https://smart-fence-integration.up.railway.app"
     }
   }
 }

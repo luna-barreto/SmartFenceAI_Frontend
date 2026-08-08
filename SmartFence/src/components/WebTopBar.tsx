@@ -41,77 +41,65 @@ export default function WebTopBar({
     .toUpperCase();
 
   return (
-    <View
-      style={[
-        st.bar,
-        isSm && st.barSm,
-        { backgroundColor: T.header, borderBottomColor: T.borde },
-      ]}
-    >
-      {/* ── Left: title + subtitle ── */}
-      <View style={st.titleWrap}>
-        <Text style={[st.titulo, isSm && st.tituloSm, { color: T.txtMain }]} numberOfLines={1}>
-          {titulo}
-        </Text>
-        {sub && !isSm ? (
-          <Text style={[st.sub, { color: T.txtSec }]} numberOfLines={1}>
-            {sub}
+    <View style={{ backgroundColor: T.header, borderBottomColor: T.borde, borderBottomWidth: 1 }}>
+      {/* ── Main row ── */}
+      <View style={[st.bar, isSm && st.barSm]}>
+        {/* Left: title + subtitle */}
+        <View style={st.titleWrap}>
+          <Text style={[st.titulo, isSm && st.tituloSm, { color: T.txtMain }]} numberOfLines={1}>
+            {titulo}
           </Text>
-        ) : null}
-      </View>
-
-      {/* ── Spacer ── */}
-      <View style={st.spacer} />
-
-      {/* ── Connected status badge — hidden on small screens ── */}
-      {!isSm && (
-        <View
-          style={[
-            st.badge,
-            { backgroundColor: conectado ? T.verdeMuy : T.rojoBg },
-          ]}
-        >
-          <View
-            style={[
-              st.badgeDot,
-              { backgroundColor: conectado ? T.verde : T.rojo },
-            ]}
-          />
-          <Text
-            style={[
-              st.badgeTxt,
-              { color: conectado ? T.verde : T.rojo },
-            ]}
-          >
-            {conectado ? "Conectado" : "Sin señal"}
-          </Text>
+          {sub && !isSm && (
+            <Text style={[st.sub, { color: T.txtSec }]} numberOfLines={1}>
+              {sub}
+            </Text>
+          )}
         </View>
-      )}
 
-      {/* ── Bell button ── */}
-      <TouchableOpacity
-        activeOpacity={0.75}
-        onPress={() => navigateTo("Alerts")}
-        style={[st.bellBtn, { backgroundColor: T.headerBtn }]}
-      >
-        <Bell size={18} color={T.txtSec} strokeWidth={1.8} />
-        {alertasCount > 0 && (
-          <View style={[st.bellBadge, { backgroundColor: T.rojo }]}>
-            <Text style={st.bellBadgeTxt}>
-              {alertasCount > 99 ? "99+" : String(alertasCount)}
+        <View style={st.spacer} />
+
+        {/* Connected badge — only on wide screens */}
+        {!isSm && (
+          <View style={[st.badge, { backgroundColor: conectado ? T.verdeMuy : T.rojoBg }]}>
+            <View style={[st.badgeDot, { backgroundColor: conectado ? T.verde : T.rojo }]} />
+            <Text style={[st.badgeTxt, { color: conectado ? T.verde : T.rojo }]}>
+              {conectado ? "Conectado" : "Sin señal"}
             </Text>
           </View>
         )}
-      </TouchableOpacity>
 
-      {/* ── rightContent slot — hidden on small screens ── */}
-      {!isSm && (rightContent ?? null)}
+        {/* Bell */}
+        <TouchableOpacity
+          activeOpacity={0.75}
+          onPress={() => navigateTo("Alerts")}
+          style={[st.bellBtn, { backgroundColor: T.headerBtn }]}
+        >
+          <Bell size={18} color={T.txtSec} strokeWidth={1.8} />
+          {alertasCount > 0 && (
+            <View style={[st.bellBadge, { backgroundColor: T.rojo }]}>
+              <Text style={st.bellBadgeTxt}>
+                {alertasCount > 99 ? "99+" : String(alertasCount)}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
 
-      {/* ── User avatar ── */}
-      <View style={[st.avatar, { backgroundColor: T.verdeOscuro }]}>
-        <Text style={st.avatarTxt}>{iniciales}</Text>
-        <View style={[st.onlineDot, { backgroundColor: T.verde }]} />
+        {/* rightContent — always visible on wide; on small it moves to action row below */}
+        {!isSm && (rightContent ?? null)}
+
+        {/* User avatar */}
+        <View style={[st.avatar, { backgroundColor: T.verdeOscuro }]}>
+          <Text style={st.avatarTxt}>{iniciales}</Text>
+          <View style={[st.onlineDot, { backgroundColor: T.verde }]} />
+        </View>
       </View>
+
+      {/* ── Action row on small screens — keeps rightContent accessible ── */}
+      {isSm && rightContent && (
+        <View style={[st.actionRow, { borderTopColor: T.borde }]}>
+          {rightContent}
+        </View>
+      )}
     </View>
   );
 }
@@ -197,6 +185,15 @@ const st = StyleSheet.create({
     fontSize: 9,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+
+  // Action row (small screens)
+  actionRow: {
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   // Avatar

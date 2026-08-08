@@ -16,7 +16,11 @@ export const api = axios.create({
 
 api.interceptors.request.use(async (config) => {
   const token = await clerkTokenRef.getToken?.();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    console.warn("[api] interceptor: no Clerk token — request to", config.url, "will be unauthenticated");
+  }
   return config;
 });
 
@@ -33,6 +37,9 @@ export const AuthAPI = {
 // ── Finca ─────────────────────────────────────────────────────────────────────
 export const FincaAPI = {
   listar: () => api.get<{ id: string; nombre: string }[]>("/fincas"),
+  // Obtiene o crea la finca del usuario autenticado (idempotente)
+  clerkSync: (nombre?: string) =>
+    api.post<{ id: string; nombre: string }>("/fincas/clerk-sync", nombre ? { nombre } : {}),
   actualizar: (id: string, data: { nombre?: string }) =>
     api.put<{ id: string; nombre: string }>(`/fincas/${id}`, data),
 };
@@ -94,19 +101,20 @@ export const AlertasAPI = {
 };
 
 // ── GPS ───────────────────────────────────────────────────────────────────────
-// NestJS devuelve posiciones con { latitud, longitud } — se normalizan a { lat, lng }
-type PosicionRaw = { latitud: number; longitud: number; dentroDeCerca: boolean; fecha: string };
+// El endpoint /gps/vivo devuelve { lat, lng } (ya normalizado en el backend).
+// El endpoint /gps/historial devuelve { latitud, longitud } (campos Prisma crudos).
+type PosicionVivo = { lat: number; lng: number; dentroDeCerca: boolean; fecha: string };
 type HistorialRaw = { collarId: string; latitud: number; longitud: number; bateria?: number; fecha: string };
 
 export const GpsAPI = {
   vivo: (fincaId: string) =>
-    api.get<{ collar: Collar; posicion: PosicionRaw | null }[]>("/gps/vivo", { params: { fincaId } })
+    api.get<{ collar: Collar; posicion: PosicionVivo | null }[]>("/gps/vivo", { params: { fincaId } })
       .then((r) => ({
         ...r,
         data: r.data.map((d) => ({
           collar: d.collar,
           posicion: d.posicion
-            ? { lat: d.posicion.latitud, lng: d.posicion.longitud, dentroDeCerca: d.posicion.dentroDeCerca, fecha: d.posicion.fecha }
+            ? { lat: d.posicion.lat, lng: d.posicion.lng, dentroDeCerca: d.posicion.dentroDeCerca, fecha: d.posicion.fecha }
             : null,
         })),
       })),

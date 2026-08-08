@@ -13,9 +13,11 @@ import {
   Map,
   Bell,
   Settings,
-  User,
   Info,
   LogOut,
+  Cpu,
+  BarChart2,
+  Brain,
 } from "lucide-react-native";
 import Svg, { Path } from "react-native-svg";
 import { useT } from "@context/ThemeContext";
@@ -43,13 +45,14 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { icon: Home,     label: "Inicio",         route: "Home"     },
-  { icon: CowIcon,  label: "Animales",        route: "Animals"  },
-  { icon: Map,      label: "Cerca virtual",   route: "Map"      },
-  { icon: Bell,     label: "Alertas",         route: "Alerts"   },
-  { icon: Settings, label: "Configuración",   route: "Settings" },
-  { icon: User,     label: "Perfil",          route: "Profile"  },
-  { icon: Info,     label: "Información",     route: "Info"     },
+  { icon: Home,     label: "Inicio",        route: "Home"     },
+  { icon: CowIcon,  label: "Animales",      route: "Animals"  },
+  { icon: Brain,    label: "Salud IA",      route: "SaludIA"  },
+  { icon: Map,      label: "Cerca virtual",  route: "Map"      },
+  { icon: Bell,     label: "Alertas",        route: "Alerts"   },
+  { icon: Cpu,      label: "Dispositivos",   route: "Devices"  },
+  { icon: BarChart2,label: "Información",    route: "Info"     },
+  { icon: Settings, label: "Configuración", route: "Settings" },
 ];
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -210,6 +213,24 @@ export default function WebSidebar({ activeRoute }: WebSidebarProps) {
               <Text style={[st.logoutTxt, { color: T.rojo }]}>Cerrar sesión</Text>
             </TouchableOpacity>
 
+            {/* Estado del sistema */}
+            <View style={[st.sysStatus, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+              <Text style={[st.sysStatusLabel, { color: T.txtSec }]}>Estado del sistema</Text>
+              <View style={st.sysStatusRow}>
+                <View style={[st.sysStatusDot, { backgroundColor: T.verde }]} />
+                <Text style={[st.sysStatusTxt, { color: T.verde }]}>Todo funcionando</Text>
+              </View>
+              <View style={st.sysConectRow}>
+                <Text style={[st.sysConectLabel, { color: T.txtSec }]}>Conectividad</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <View style={[st.signalBar, { backgroundColor: T.verde, height: 4 }]} />
+                  <View style={[st.signalBar, { backgroundColor: T.verde, height: 6 }]} />
+                  <View style={[st.signalBar, { backgroundColor: T.verde, height: 9 }]} />
+                  <Text style={[st.sysConectVal, { color: T.verde }]}>Excelente</Text>
+                </View>
+              </View>
+            </View>
+
             <Text style={[st.version, { color: T.txtTer }]}>v1.0.0</Text>
           </>
         )}
@@ -366,4 +387,18 @@ const st = StyleSheet.create({
     textAlign: "center",
     fontSize: 10,
   },
+
+  // ── System status card ──
+  sysStatus: {
+    borderRadius: 10, borderWidth: 1,
+    padding: 10, gap: 5,
+  },
+  sysStatusLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.3 },
+  sysStatusRow:   { flexDirection: "row", alignItems: "center", gap: 5 },
+  sysStatusDot:   { width: 6, height: 6, borderRadius: 3 },
+  sysStatusTxt:   { fontSize: 11, fontWeight: "700" },
+  sysConectRow:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sysConectLabel: { fontSize: 10 },
+  sysConectVal:   { fontSize: 10, fontWeight: "600" },
+  signalBar:      { width: 3, borderRadius: 1 },
 });

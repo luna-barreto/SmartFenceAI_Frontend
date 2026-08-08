@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -68,7 +68,7 @@ function RootRedirector() {
 
   useEffect(() => {
     if (cargando) return;
-    const ruta = nav.current?.getCurrentRoute()?.name;
+    const ruta = nav.current?.getCurrentRoute()?.name as string | undefined;
     if (!usuario && ruta !== "Auth" && ruta !== "Splash") {
       nav.current?.reset({ index: 0, routes: [{ name: "Auth" }] });
     } else if (usuario && (ruta === "Auth" || ruta === "Splash" || ruta === "Login")) {
@@ -80,9 +80,10 @@ function RootRedirector() {
 }
 
 export default function AppNavigator() {
+  const [navReady, setNavReady] = useState(false);
   return (
-    <NavigationContainer ref={navigationRef}>
-      <RootRedirector />
+    <NavigationContainer ref={navigationRef} onReady={() => setNavReady(true)}>
+      {navReady && <RootRedirector />}
       <OuterStack.Navigator screenOptions={{ headerShown: false, animation: "fade" }}>
         <OuterStack.Screen name="Splash" component={SplashScreen} />
         <OuterStack.Screen name="Auth"   component={AuthNavigator} />

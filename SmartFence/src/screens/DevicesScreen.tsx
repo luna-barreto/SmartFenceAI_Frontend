@@ -145,7 +145,7 @@ function TarjetaCollar({ animal }: { animal: Animal }) {
           <Cpu size={20} color={T.verde} strokeWidth={1.6} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[st.collarId, { color: T.txtMain }]}>{animal.collar?.id ?? "—"}</Text>
+          <Text style={[st.collarId, { color: T.txtMain }]}>{animal.collar?.serial ?? "—"}</Text>
           <Text style={[st.collarAnimal, { color: T.txtSec }]}>{animal.nombre}</Text>
         </View>
         <View style={[st.estadoBadge, { backgroundColor: estadoBg }]}>

@@ -5,15 +5,15 @@ import { AnimalesAPI, CercasAPI, GpsAPI } from "@/services/api";
 import { suscribirTelemetria, suscribirAlertas } from "@/services/socket";
 import { useAuth } from "@/context/AuthContext";
 
-// Cerca de referencia para modo sin backend (coordenadas Antioquia, Colombia)
+// Cerca de referencia para modo sin backend (zona rural Galapa, Atlántico)
 export const CERCA_DEMO: Coordenada[] = [
-  { lat: 6.2085, lng: -75.586 },
-  { lat: 6.2101, lng: -75.5834 },
-  { lat: 6.209,  lng: -75.5798 },
-  { lat: 6.2058, lng: -75.5785 },
-  { lat: 6.203,  lng: -75.5805 },
-  { lat: 6.2022, lng: -75.5838 },
-  { lat: 6.2045, lng: -75.5862 },
+  { lat: 10.9012, lng: -74.9021 },
+  { lat: 10.9034, lng: -74.8987 },
+  { lat: 10.9021, lng: -74.8953 },
+  { lat: 10.8994, lng: -74.8942 },
+  { lat: 10.8968, lng: -74.8961 },
+  { lat: 10.8961, lng: -74.8998 },
+  { lat: 10.8985, lng: -74.9024 },
 ];
 
 const NOMBRES = ["Lucero", "Canela", "Estrella", "Manchas", "Trueno", "Paloma", "Rocío", "Pinta", "Sultán", "Girasol"];
@@ -77,7 +77,7 @@ interface UsarAnimalesOpciones {
 export function useAnimals(opciones: UsarAnimalesOpciones = {}) {
   const { intervaloMs = 20000, usarSimulacion = true, onNuevaAlerta } = opciones;
   const { usuario } = useAuth();
-  const [animales, setAnimales] = useState<Animal[]>(() => generarAnimalesDemo(10));
+  const [animales, setAnimales] = useState<Animal[]>([]);
   const [cerca, setCerca] = useState<Cerca | null>(null);
   const [cargandoCerca, setCargandoCerca] = useState(true);
   const [conectado, setConectado] = useState(true);
@@ -89,8 +89,12 @@ export function useAnimals(opciones: UsarAnimalesOpciones = {}) {
     try {
       // Carga base: lista de animales con sus collares
       const { data: listaAnimales } = await AnimalesAPI.listar(fincaId);
-      if (!listaAnimales.length) return;
+      // El backend respondió — desactivar simulación aunque la lista esté vacía
       backendOkRef.current = true;
+      if (!listaAnimales.length) {
+        setAnimales([]);
+        return;
+      }
 
       // Posiciones en vivo desde Redis (TTL 120 s) — da lat/lng/dentroDeCerca actuales
       let posicionesVivo: Record<string, { lat: number; lng: number; dentroDeCerca: boolean; fecha: string }> = {};
@@ -290,5 +294,13 @@ export function useAnimals(opciones: UsarAnimalesOpciones = {}) {
     return () => clearInterval(intervalo);
   }, [intervaloMs, usarSimulacion, onNuevaAlerta, cerca]);
 
-  return { animales, conectado, ultimaSync, cerca, cargandoCerca, recargar };
+  // Exponer todos los animales reales (no demo) que tienen collar asignado.
+  // El estado "en_linea"/"fuera_de_rango" se usa como indicador visual pero no
+  // oculta el animal: si lo filtráramos, el handler del WebSocket nunca podría
+  // actualizarlo cuando llegue la primera posición GPS.
+  const animalesReales = animales.filter(
+    (a) => a.fincaId !== "demo" && a.collar != null
+  );
+
+  return { animales: animalesReales, conectado, ultimaSync, cerca, cargandoCerca, recargar };
 }

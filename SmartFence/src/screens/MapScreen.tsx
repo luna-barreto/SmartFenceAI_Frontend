@@ -7,14 +7,14 @@ import {
 } from "react-native";
 import {
   Menu, Bell, Search, SlidersHorizontal,
-  Pencil, Plus, ChevronDown, ShieldCheck, X, Check,
+  Pencil, Plus, ChevronDown, ShieldCheck, X, Check, MapPin,
 } from "lucide-react-native";
 import Svg, { Path } from "react-native-svg";
 import { useAnimalsCtx } from "@context/AnimalsContext";
 import { CERCA_DEMO } from "@hooks/useAnimals";
 import { useDrawer } from "@context/DrawerContext";
 import { useT } from "@context/ThemeContext";
-import { centroDe, generarPoligonoCentrado } from "@utils/geo";
+import { centroDe, generarPoligonoCentrado, translatePolygon } from "@utils/geo";
 import { Coordenada } from "@/types";
 import MapaOSM, { MapaOSMHandle } from "@components/MapaOSM";
 import { CercasAPI } from "@services/api";
@@ -195,13 +195,17 @@ export default function MapScreen() {
   );
   const cercaRecentradaRef = useRef(false);
   useEffect(() => {
-    if (hayGeocercaReal) {
-      setCerca(cercaBackend!.coordenadas);
-    }
+    if (!hayGeocercaReal) return;
+    if (bloqueandoSyncRef.current) return; // no pisar edición local
+    setCerca(cercaBackend!.coordenadas);
   }, [hayGeocercaReal, cercaBackend]);
 
   const cercaIdRef = useRef<string | undefined>(cercaBackend?.id);
   useEffect(() => { cercaIdRef.current = cercaBackend?.id; }, [cercaBackend]);
+
+  // true mientras el usuario está en modo edición o justo acaba de guardar,
+  // para que el efecto de sincronización del backend no pise los coords locales.
+  const bloqueandoSyncRef = useRef(false);
 
   const mapaRef = useRef<MapaOSMHandle>(null);
 
@@ -301,10 +305,12 @@ export default function MapScreen() {
 
   function iniciarEdicion() {
     cercaSnapshotRef.current = cerca;
+    bloqueandoSyncRef.current = true;
     setEditando(true);
   }
 
   function cancelarEdicion() {
+    bloqueandoSyncRef.current = false;
     setCerca(cercaSnapshotRef.current);
     setEditando(false);
   }
@@ -327,15 +333,48 @@ export default function MapScreen() {
           longitudDispositivo: ubicacionUsuario?.lng,
         });
         cercaIdRef.current = data.id;
-        recargarContexto();
       } else {
         await CercasAPI.actualizar(id, { coordenadas: cerca });
-        recargarContexto();
       }
       setEditando(false);
+      bloqueandoSyncRef.current = false;
+      recargarContexto();
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? e?.message ?? "Error desconocido";
       Alert.alert("Error al guardar", msg);
+    } finally {
+      setGuardandoCerca(false);
+    }
+  }
+
+  async function moverCercaAMiUbicacion() {
+    if (!ubicacionUsuario) {
+      Alert.alert("Sin GPS", "Esperando señal GPS. Inténtalo de nuevo en unos segundos.");
+      return;
+    }
+    const fincaId = usuario?.fincaId;
+    if (!fincaId || fincaId === "demo") return;
+    const oldCenter = centroDe(cerca);
+    const nuevaCerca = translatePolygon(cerca, oldCenter, ubicacionUsuario);
+    setCerca(nuevaCerca);
+    setGuardandoCerca(true);
+    try {
+      const id = cercaIdRef.current;
+      if (id) {
+        await CercasAPI.actualizar(id, { coordenadas: nuevaCerca });
+      } else {
+        const { data } = await CercasAPI.crear({
+          fincaId,
+          nombre: "Geocerca principal",
+          coordenadas: nuevaCerca,
+          latitudDispositivo: ubicacionUsuario.lat,
+          longitudDispositivo: ubicacionUsuario.lng,
+        });
+        cercaIdRef.current = data.id;
+      }
+      recargarContexto();
+    } catch (e: any) {
+      Alert.alert("Error", e?.response?.data?.message ?? e?.message ?? "Error desconocido");
     } finally {
       setGuardandoCerca(false);
     }
@@ -409,6 +448,17 @@ export default function MapScreen() {
           {/* Botones flotantes inferiores */}
           {!editando && (
             <View style={st.mapActions}>
+              {ubicacionUsuario && hayGeocercaReal && (
+                <TouchableOpacity
+                  style={[st.btnMover, { backgroundColor: T.card, borderColor: T.borde }]}
+                  onPress={moverCercaAMiUbicacion}
+                  activeOpacity={0.85}
+                  disabled={guardandoCerca}
+                >
+                  <MapPin size={15} color={T.verde} strokeWidth={2} />
+                  <Text style={[st.btnMoverTxt, { color: T.verde }]}>Mover cerca a mi ubicación</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[st.btnEditar, { backgroundColor: T.card, borderColor: T.borde }]}
                 onPress={iniciarEdicion}
@@ -620,6 +670,14 @@ const st = StyleSheet.create({
     position: "absolute", bottom: 16, right: 14,
     gap: 10, alignItems: "flex-end",
   },
+  btnMover: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10,
+    borderWidth: 1,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 10, elevation: 6,
+  },
+  btnMoverTxt: { fontSize: 13, fontWeight: "700" },
   btnEditar: {
     flexDirection: "row", alignItems: "center", gap: 6,
     borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10,

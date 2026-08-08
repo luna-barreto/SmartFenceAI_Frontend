@@ -8,6 +8,13 @@ const SOCKET_URL =
   "http://localhost:4000";
 
 let socket: Socket | null = null;
+// Última sala a la que el cliente se unió — se reenvía tras reconexión.
+let _fincaActual: string | null = null;
+
+// Callbacks registrados antes de que se cree el socket (race condition al montar).
+// Se adjuntan al socket en cuanto conectarSocket() lo instancia.
+const _pendingTelemetria: ((e: EventoTelemetria) => void)[] = [];
+const _pendingAlertas:    ((a: Alerta) => void)[]           = [];
 
 export function conectarSocket(token?: string): Socket {
   if (socket?.connected) return socket;
@@ -23,10 +30,22 @@ export function conectarSocket(token?: string): Socket {
     reconnectionDelay: 3000,
   });
 
+  // Re-unirse automáticamente a la sala de la finca tras reconexión.
+  socket.on("connect", () => {
+    if (_fincaActual) socket?.emit("finca:unirse", _fincaActual);
+  });
+
+  // Adjuntar callbacks que llegaron antes que el socket existiera.
+  for (const cb of _pendingTelemetria) socket.on("gps:posicion", cb);
+  for (const cb of _pendingAlertas)    socket.on("alerta:nueva", cb);
+  _pendingTelemetria.length = 0;
+  _pendingAlertas.length    = 0;
+
   return socket;
 }
 
 export function unirseAFinca(fincaId: string) {
+  _fincaActual = fincaId;
   socket?.emit("finca:unirse", fincaId);
 }
 
@@ -41,13 +60,29 @@ export function desconectarSocket() {
 
 // El backend emite "gps:posicion" (no "telemetria:collar")
 export function suscribirTelemetria(cb: (evento: EventoTelemetria) => void): () => void {
-  socket?.on("gps:posicion", cb);
-  return () => { socket?.off("gps:posicion", cb); };
+  if (socket) {
+    socket.on("gps:posicion", cb);
+  } else {
+    _pendingTelemetria.push(cb);
+  }
+  return () => {
+    socket?.off("gps:posicion", cb);
+    const idx = _pendingTelemetria.indexOf(cb);
+    if (idx !== -1) _pendingTelemetria.splice(idx, 1);
+  };
 }
 
 export function suscribirAlertas(cb: (alerta: Alerta) => void): () => void {
-  socket?.on("alerta:nueva", cb);
-  return () => { socket?.off("alerta:nueva", cb); };
+  if (socket) {
+    socket.on("alerta:nueva", cb);
+  } else {
+    _pendingAlertas.push(cb);
+  }
+  return () => {
+    socket?.off("alerta:nueva", cb);
+    const idx = _pendingAlertas.indexOf(cb);
+    if (idx !== -1) _pendingAlertas.splice(idx, 1);
+  };
 }
 
 export default { conectarSocket, desconectarSocket, unirseAFinca, salirDeFinca, suscribirTelemetria, suscribirAlertas };

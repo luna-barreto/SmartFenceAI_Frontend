@@ -54,3 +54,18 @@ export function generarPoligonoCentrado(centro: Coordenada, radioMetros = 150): 
     { lat: centro.lat - latOff, lng: centro.lng - lngOff }, // SO
   ];
 }
+
+/**
+ * Traslada todos los vértices de un polígono moviendo su centro de oldCenter a
+ * newCenter. Conserva exactamente la forma, el tamaño y el ángulo — solo cambian
+ * las coordenadas en la misma cantidad (delta lat/lng).
+ */
+export function translatePolygon(
+  polygon: Coordenada[],
+  oldCenter: Coordenada,
+  newCenter: Coordenada,
+): Coordenada[] {
+  const dLat = newCenter.lat - oldCenter.lat;
+  const dLng = newCenter.lng - oldCenter.lng;
+  return polygon.map(p => ({ lat: p.lat + dLat, lng: p.lng + dLng }));
+}

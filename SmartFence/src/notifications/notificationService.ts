@@ -11,6 +11,7 @@ import {
   tituloParaTipo,
 } from "./notificationTypes";
 import { navigateTo } from "@navigation/navigationRef";
+import { PushAPI } from "@services/api";
 
 // En Expo Go (SDK 53+) las push notifications remotas no están disponibles.
 // Todas las funciones de este módulo son no-op cuando se detecta ese entorno.
@@ -79,6 +80,26 @@ export async function inicializarNotificaciones(): Promise<boolean> {
   }
 
   return false;
+}
+
+/**
+ * Obtiene el token Expo Push y lo registra en el backend.
+ * Llamar después de que el usuario esté autenticado (token Clerk disponible).
+ */
+export async function registrarTokenPushEnBackend(): Promise<void> {
+  if (EN_EXPO_GO) return;
+  try {
+    const projectId =
+      (Constants.expoConfig?.extra?.eas?.projectId as string | undefined) ??
+      (Constants.expoConfig?.extra?.projectId as string | undefined);
+    const tokenOpts = projectId ? { projectId } : {};
+    const { data: expoPushToken } = await Notifications.getExpoPushTokenAsync(tokenOpts as any);
+    const plataforma = Platform.OS === "ios" ? "ios" : "android";
+    await PushAPI.registrarToken(expoPushToken, plataforma);
+    console.log("[SmartFence] Token push registrado:", expoPushToken);
+  } catch (err) {
+    console.warn("[SmartFence] No se pudo registrar token push:", err);
+  }
 }
 
 function mapearImportancia(imp: string): Notifications.AndroidImportance {

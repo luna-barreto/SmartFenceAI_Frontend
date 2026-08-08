@@ -714,7 +714,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({ iconUrl: '', shadowUrl: '', iconRetinaUrl: '' });
 
-    const mapa = L.map('mapa', { zoomControl: false, attributionControl: false }).setView([4.5709, -74.2973], 14);
+    const mapa = L.map('mapa', { zoomControl: false, attributionControl: false }).setView([10.8997, -74.8983], 14);
 
     const capaOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
     const capaSatelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 });
@@ -772,14 +772,16 @@ svg.leaflet-image-layer.leaflet-interactive path {
         const m = L.marker(pt, { icon: icono, draggable: true }).addTo(mapa);
         m.on('drag', (e) => { const ll = e.target.getLatLng(); cercaCoords[i] = [ll.lat, ll.lng]; dibujarCerca(); });
         m.on('dragend', () => {
-          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'cerca_actualizada', puntos: cercaCoords }));
+          const _msg = JSON.stringify({ tipo: 'cerca_actualizada', puntos: cercaCoords });
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(_msg);
+          window.parent !== window && window.parent.postMessage(_msg, '*');
         });
         verticeMarkers.push(m);
       });
     }
 
     function colorMarker(a) {
-      if (!a.collar || a.collar.estado === 'fuera_de_rango' || a.collar.estado === 'sin_ñal') return '#6B7280';
+      if (!a.collar || a.collar.estado === 'fuera_de_rango' || a.collar.estado === 'sin_señal') return '#6B7280';
       const bat = a.collar.bateriaPorcentaje != null ? a.collar.bateriaPorcentaje : (a.collar.bateria != null ? a.collar.bateria : 100);
       if (bat <= 20) return '#F59E0B';
       return a.dentroDeCerca ? '#43A047' : '#EF4444';
@@ -792,9 +794,23 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const batColor = bat <= 20 ? '#EF4444' : bat <= 50 ? '#F59E0B' : '#43A047';
       const lat = a.ubicacion ? a.ubicacion.lat.toFixed(6) : '—';
       const lng = a.ubicacion ? a.ubicacion.lng.toFixed(6) : '—';
+      // Sensor de calor (optional — present when coming from demo data)
+      const saludHtml = (a.saludLabel && a.saludR != null)
+        ? '<div style="display:flex;align-items:center;gap:5px;margin-top:5px">'
+          + '<div style="width:9px;height:9px;border-radius:50%;background:rgb(' + a.saludR + ',' + a.saludG + ',' + a.saludB + ');flex-shrink:0"></div>'
+          + '<span style="font-size:11px;color:#94A3B8">Sensor calor:</span>'
+          + '<span style="font-size:11px;font-weight:700;color:rgb(' + a.saludR + ',' + a.saludG + ',' + a.saludB + ')">' + a.saludLabel + '</span>'
+          + '</div>'
+        : '';
+      // Collar cortado warning
+      const collarCortadoHtml = (a.collar && (a.collar.estado === 'fuera_de_rango'))
+        ? '<div style="margin-top:4px;font-size:11px;color:#EF4444;font-weight:700">⚠ Collar sin señal</div>'
+        : '';
       return '<div style="min-width:160px"><b style="font-size:13px">' + a.nombre + '</b><br>'
         + '<span style="color:#94A3B8;font-size:11px">' + serial + '</span><br>'
-        + '<span style="margin-top:4px;display:inline-block">' + estado + '</span><br>'
+        + '<span style="margin-top:4px;display:inline-block">' + estado + '</span>'
+        + collarCortadoHtml
+        + saludHtml
         + '<div style="margin-top:4px;font-size:11px;color:#94A3B8">📍 ' + lat + ', ' + lng + '</div>'
         + '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">'
         + '<span style="font-size:11px;color:#94A3B8">Batería</span>'
@@ -829,7 +845,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
           const m = L.marker([a.ubicacion.lat, a.ubicacion.lng], { icon: icono }).addTo(mapa);
           m.bindTooltip(makeTooltip(a), { direction: 'top', offset: [0, -20] });
           m.on('click', () => {
-            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'animal_click', id: a.id }));
+            const _msg = JSON.stringify({ tipo: 'animal_click', id: a.id });
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(_msg);
+            window.parent !== window && window.parent.postMessage(_msg, '*');
           });
           marcadores[a.id] = m;
         }
@@ -873,16 +891,39 @@ svg.leaflet-image-layer.leaflet-interactive path {
     window.centerarEnUsuario = function() {
       if (userLat && userLng) mapa.setView([userLat, userLng], mapa.getZoom());
     };
-    window.actualizarCerca = (coords) => { cercaCoords = coords; dibujarCerca(); dibujarVertices(); };
+    window.actualizarCerca = (coords, fitView) => {
+      cercaCoords = coords; dibujarCerca(); dibujarVertices();
+      if (fitView && coords.length > 1) {
+        try { mapa.fitBounds(L.polygon(coords).getBounds(), { padding: [40, 40] }); } catch(e) {}
+      }
+    };
     window.setEditando = (val) => { modoEdicion = val; dibujarCerca(); dibujarVertices(); };
     window.actualizarAnimales = pintarAnimales;
 
-    // Notificar a React Native que el mapa está listo
-    window.addEventListener('load', function() {
-      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'listo' }));
+    // Recibir comandos desde React (iframe web) o desde React Native (WebView)
+    window.addEventListener('message', function(e) {
+      try {
+        const cmd = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (!cmd || !cmd.tipo) return;
+        if (cmd.tipo === 'moverVista') window.moverVista && window.moverVista(cmd.lat, cmd.lng, cmd.zoom);
+        else if (cmd.tipo === 'actualizarCerca') window.actualizarCerca && window.actualizarCerca(cmd.coords, cmd.fitView);
+        else if (cmd.tipo === 'actualizarAnimales') window.actualizarAnimales && window.actualizarAnimales(cmd.animales);
+        else if (cmd.tipo === 'setEditando') window.setEditando && window.setEditando(cmd.valor);
+        else if (cmd.tipo === 'actualizarUbicacionUsuario') window.actualizarUbicacionUsuario && window.actualizarUbicacionUsuario(cmd.lat, cmd.lng);
+        else if (cmd.tipo === 'mostrarHistorial') window.mostrarHistorial && window.mostrarHistorial(cmd.puntos);
+        else if (cmd.tipo === 'limpiarHistorial') window.limpiarHistorial && window.limpiarHistorial();
+      } catch (err) { /* ignorar mensajes mal formados */ }
     });
+
+    // Notificar a React Native / parent que el mapa está listo
+    function _notificarListo() {
+      const _msg = JSON.stringify({ tipo: 'listo' });
+      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(_msg);
+      window.parent !== window && window.parent.postMessage(_msg, '*');
+    }
+    window.addEventListener('load', _notificarListo);
     // También notificar inline (por si load ya disparó)
-    window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'listo' }));
+    _notificarListo();
   </script>
 </body>
 </html>

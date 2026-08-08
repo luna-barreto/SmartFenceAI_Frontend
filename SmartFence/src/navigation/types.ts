@@ -18,6 +18,7 @@ export type PilaRaiz = {
   Settings: undefined;
   Info: undefined;
   Admin: undefined;
+  SaludIA: undefined;
 };
 
 declare global {

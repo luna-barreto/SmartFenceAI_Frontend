@@ -190,7 +190,7 @@ function AnimalRow({ animal, onPress }: { animal: EnrichedAnimal; onPress: () =>
       {/* Derecha: collar + batería + estado */}
       <View style={st.animalRight}>
         {/* ID collar */}
-        <Text style={[st.collarId, { color: T.txtSec }]}>{animal.collar?.id ?? "Sin collar"}</Text>
+        <Text style={[st.collarId, { color: T.txtSec }]}>{animal.collar?.serial ?? "Sin collar"}</Text>
 
         {/* Batería */}
         <View style={st.bateriaRow}>
@@ -314,15 +314,22 @@ function RegistrarAnimalModal({
       Alert.alert("Collar requerido", "Debes ingresar o seleccionar el serial del collar físico.");
       return;
     }
+    if (!usuario?.fincaId) {
+      Alert.alert("Sin finca", "No se pudo obtener tu finca. Cierra sesión y vuelve a ingresar.");
+      return;
+    }
+
+    const payload = {
+      nombre: nombre.trim(),
+      raza: raza.trim() || undefined,
+      fincaId: usuario.fincaId,
+      collarSerial: serial,
+    };
+    console.log("[crearConCollar] payload enviado:", JSON.stringify(payload));
 
     setGuardando(true);
     try {
-      await AnimalesAPI.crearConCollar({
-        nombre: nombre.trim(),
-        raza: raza.trim() || undefined,
-        fincaId: usuario?.fincaId,
-        collarSerial: serial,
-      });
+      await AnimalesAPI.crearConCollar(payload);
       limpiar();
       onRegistrado();
       onCerrar();
@@ -331,8 +338,21 @@ function RegistrarAnimalModal({
         `${nombre.trim()} fue creado y vinculado al collar ${serial}.`
       );
     } catch (err: any) {
-      const msg = err?.response?.data?.mensaje ?? "Verifica la conexión con el servidor.";
-      Alert.alert("Error al registrar", msg);
+      const data = err?.response?.data;
+      const status = err?.response?.status;
+      console.error(
+        "[crearConCollar] status:", status,
+        "| body:", JSON.stringify(data),
+        "| message:", err?.message
+      );
+      // NestJS devuelve { message, statusCode } — el backend local puede devolver { mensaje }
+      const msg =
+        data?.mensaje ??
+        (Array.isArray(data?.message) ? data.message.join(", ") : data?.message) ??
+        err?.message ??
+        "Verifica la conexión con el servidor.";
+      const sufijo = status ? ` (HTTP ${status})` : "";
+      Alert.alert("Error al registrar", `${msg}${sufijo}`);
     } finally {
       setGuardando(false);
     }

@@ -21,12 +21,10 @@ import {
   Pencil,
   X,
   Check,
-  MapPin,
 } from "lucide-react-native";
 import { useT } from "@context/ThemeContext";
-import { CERCA_DEMO } from "@hooks/useAnimals";
 import { useAnimalsCtx } from "@context/AnimalsContext";
-import { centroDe, generarPoligonoCentrado, translatePolygon } from "@utils/geo";
+import { centroDe, generarPoligonoCentrado } from "@utils/geo";
 import { Coordenada } from "@/types";
 import { navigateTo } from "@navigation/navigationRef";
 import WebSidebar from "@components/WebSidebar";
@@ -34,12 +32,10 @@ import WebTopBar from "@components/WebTopBar";
 import MapaOSM, { MapaOSMHandle } from "@components/MapaOSM";
 import { CercasAPI } from "@services/api";
 import { useAuth } from "@context/AuthContext";
-
-// ─── Demo animal rows shown when animales is empty ────────────────────────────
-const DEMO_NAMES = [
-  "Vaca 01", "Vaca 02", "Vaca 03", "Vaca 04",
-  "Vaca 05", "Vaca 06", "Vaca 07", "Vaca 08",
-];
+import {
+  ANIMALES_DEMO, STATS_DEMO, CENTRO_DEMO, CERCA_DEMO,
+  type AnimalDemo, type SaludSensor,
+} from "@/demo/demoData";
 
 // ─── Divider ──────────────────────────────────────────────────────────────────
 function Divider({ marginVertical }: { marginVertical: number }) {
@@ -84,31 +80,15 @@ export default function MapScreen() {
     cercaIdRef.current = cercaBackend?.id;
   }, [cercaBackend, cargandoCerca]);
 
-  // GPS del browser
-  const [ubicacionUsuario, setUbicacionUsuario] = useState<Coordenada | null>(null);
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
-      { enableHighAccuracy: true, distanceFilter: 10 } as PositionOptions
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  const ubicacionUsuario = null;
 
   const bateriaProm = animales.length
     ? Math.round(animales.reduce((s, a) => s + (a.collar?.bateria ?? 0), 0) / animales.length)
     : 69;
 
-  const cercaEsDemo = !cercaBackend?.coordenadas?.length;
-  const centro = cercaEsDemo
-    ? (ubicacionUsuario ?? centroDe(cerca.length ? cerca : CERCA_DEMO))
-    : centroDe(cerca);
+  const centro = cercaBackend?.coordenadas?.length
+    ? centroDe(cerca)
+    : CENTRO_DEMO;
 
   // Solo actualiza estado local mientras el usuario arrastra vértices.
   // El guardado real ocurre únicamente al presionar "Guardar".
@@ -154,69 +134,75 @@ export default function MapScreen() {
     }
   }
 
-  async function moverCercaAMiUbicacion() {
-    if (!ubicacionUsuario) return;
-    const fincaId = usuario?.fincaId;
-    if (!fincaId || fincaId === "demo") return;
-    const oldCenter = centroDe(cerca);
-    const nuevaCerca = translatePolygon(cerca, oldCenter, ubicacionUsuario);
-    setCerca(nuevaCerca);
-    setGuardando(true);
-    try {
-      const id = cercaIdRef.current;
-      if (id) {
-        await CercasAPI.actualizar(id, { coordenadas: nuevaCerca });
-      } else {
-        const { data } = await CercasAPI.crear({
-          fincaId,
-          nombre: "Geocerca principal",
-          coordenadas: nuevaCerca,
-        });
-        cercaIdRef.current = data.id;
-      }
-      recargarContexto();
-    } catch (e: any) {
-      console.error("Error moviendo geocerca:", e?.message);
-    } finally {
-      setGuardando(false);
-    }
-  }
-
   const dentroCount = animales.length
     ? animales.filter((a) => a.dentroDeCerca).length
-    : 10;
+    : STATS_DEMO.dentroCount;
   const fueraCount = animales.length
     ? animales.filter((a) => !a.dentroDeCerca).length
-    : 1;
+    : STATS_DEMO.fueraCount;
 
-  // Animal list — use real data or 8 demo rows
-  const listaAnimales =
-    animales.length > 0
-      ? animales
-      : DEMO_NAMES.map((nombre, i) => ({
-          id: `demo-${i}`,
-          nombre,
-          raza: "Holstein",
-          peso: 400,
-          salud: "Buena" as const,
-          ubicacion: { lat: 6.205, lng: -75.583 },
-          dentroDeCerca: i < 7,
-          fincaId: "finca-1",
-          collar: {
-            id: `COL-${1000 + i}`,
-            bateria: 60 + i * 3,
-            señal: "Buena" as const,
-            protocolo: "LoRa" as const,
-            ultimaConexion: new Date().toISOString(),
-            estado: "en_linea" as const,
-          },
-        }));
+  // Animal list — use real data or full demo dataset
+  const listaAnimales: AnimalDemo[] = animales.length > 0
+    ? animales.map((a, i): AnimalDemo => ({
+        id: a.id,
+        nombre: a.nombre,
+        displayNombre: a.nombre,
+        identificacion: a.codigo ?? `VAC-${100 + i}`,
+        categoria: "Vaca",
+        raza: a.raza ?? "—",
+        edad: "—",
+        genero: "♀",
+        potrero: "—",
+        estado: a.dentroDeCerca ? "dentro" : "fuera",
+        estadoCollar: "en_linea",
+        salud: { sensor: "verde", label: "Excelente", descripcion: "", r: 180, g: 220, b: 170 },
+        bateria: a.collar?.bateria ?? 0,
+        señal: (a.collar?.señal ?? "Buena") as "Excelente" | "Buena" | "Débil",
+        collarId: a.collar?.id ?? "—",
+        ubicacion: a.ubicacion ?? { lat: 10.875244, lng: -74.908449 },
+        dentroDeCerca: a.dentroDeCerca ?? false,
+        ultimaVez: "Reciente",
+        peso: a.peso ?? 0,
+      }))
+    : ANIMALES_DEMO;
 
   const listaFiltrada = busqueda.trim()
     ? listaAnimales.filter((a) =>
-        a.nombre.toLowerCase().includes(busqueda.toLowerCase())
+        a.displayNombre.toLowerCase().includes(busqueda.toLowerCase())
       )
     : listaAnimales;
+
+  // Build map-ready list: real animals when connected, demo dataset otherwise.
+  // Extra salud fields (saludLabel/R/G/B) are passed through JSON to Leaflet's makeTooltip.
+  const animalesParaMapa = (animales.length > 0 ? animales : ANIMALES_DEMO.map((a) => ({
+    id: a.id,
+    codigo: a.identificacion,
+    nombre: a.displayNombre,
+    raza: a.raza,
+    fincaId: "demo",
+    ubicacion: a.ubicacion,
+    dentroDeCerca: a.dentroDeCerca,
+    peso: a.peso,
+    saludLabel: a.salud.label,
+    saludR: a.salud.r,
+    saludG: a.salud.g,
+    saludB: a.salud.b,
+    collar: {
+      id: a.collarId,
+      serial: a.collarId,
+      fincaId: "demo",
+      activo: a.estadoCollar !== "cortado" && a.estadoCollar !== "retirado",
+      bateria: a.bateria,
+      bateriaPorcentaje: a.bateria,
+      estado: (
+        a.estadoCollar === "en_linea" || a.estadoCollar === "bateria_baja"
+          ? "en_linea"
+          : a.estadoCollar === "sin_señal"
+          ? "sin_señal"
+          : "fuera_de_rango"
+      ) as "en_linea" | "sin_señal" | "fuera_de_rango",
+    },
+  }))) as any;
 
   // ── Right content for WebTopBar ──────────────────────────────────────────
   const rightContent = (
@@ -225,7 +211,7 @@ export default function MapScreen() {
         style={[st.btnNuevaGeocerca, { backgroundColor: T.verdeOscuro }]}
         activeOpacity={0.85}
         onPress={() => {
-          const origen = ubicacionUsuario ?? centroDe(cerca.length ? cerca : CERCA_DEMO);
+          const origen = centroDe(cerca.length ? cerca : CERCA_DEMO);
           cercaSnapshotRef.current = cerca;
           setCerca(generarPoligonoCentrado(origen, 150));
           setEditando(true);
@@ -397,7 +383,7 @@ export default function MapScreen() {
           <View style={st.mapArea}>
             <MapaOSM
               ref={mapaRef}
-              animales={animales}
+              animales={animalesParaMapa}
               cerca={cerca}
               centro={centro}
               editando={editando}
@@ -416,17 +402,6 @@ export default function MapScreen() {
                   <Pencil size={14} color={T.txtMain} strokeWidth={2} />
                   <Text style={[st.btnEditarTxt, { color: T.txtMain }]}>Editar cerca</Text>
                 </TouchableOpacity>
-                {ubicacionUsuario && (
-                  <TouchableOpacity
-                    style={[st.btnMover, { backgroundColor: T.card, borderColor: T.borde }]}
-                    onPress={moverCercaAMiUbicacion}
-                    activeOpacity={0.85}
-                    disabled={guardando}
-                  >
-                    <MapPin size={14} color={T.verde} strokeWidth={2} />
-                    <Text style={[st.btnMoverTxt, { color: T.verde }]}>Mover cerca a mi ubicación</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             ) : (
               <View style={st.editBannerWeb}>
@@ -500,7 +475,7 @@ export default function MapScreen() {
                   ]}
                 >
                   <Text style={[st.countBadgeTxt, { color: T.verde }]}>
-                    {listaAnimales.length}
+                    {listaAnimales.length} · {fueraCount > 0 ? `${fueraCount} fuera` : "Todos dentro"}
                   </Text>
                 </View>
               </View>
@@ -530,103 +505,57 @@ export default function MapScreen() {
             </View>
 
             {/* Animal list */}
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              style={{ flex: 1 }}
-            >
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
               {listaFiltrada.map((animal, idx) => {
-                const initials = animal.nombre
-                  .split(" ")
-                  .slice(0, 2)
-                  .map((w) => w[0])
-                  .join("")
-                  .toUpperCase();
-                const avatarBg = idx % 2 === 0 ? T.verdeLuz : T.naranjaBg;
+                const initials = animal.displayNombre
+                  .split(" ").slice(0, 2).map((w: string) => w[0]).join("").toUpperCase();
+                const avatarBg    = idx % 2 === 0 ? T.verdeLuz : T.naranjaBg;
                 const statusColor = animal.dentroDeCerca ? T.verde : T.rojo;
                 const statusLabel = animal.dentroDeCerca ? "Dentro" : "Fuera";
-                const batPct = animal.collar?.bateria ?? 0;
+                const batPct = animal.bateria;
+                const saludColor: Record<SaludSensor, string> = { verde: T.verde, amarillo: T.naranja, rojo: T.rojo };
 
                 return (
-                  <View
-                    key={animal.id}
-                    style={[
-                      st.animalRow,
-                      { borderBottomColor: T.borde },
-                    ]}
-                  >
+                  <View key={animal.id} style={[st.animalRow, { borderBottomColor: T.borde }]}>
                     {/* Avatar */}
                     <View style={[st.animalAvatar, { backgroundColor: avatarBg }]}>
-                      <Text
-                        style={[st.animalInitials, { color: T.verdeOscuro }]}
-                      >
-                        {initials}
-                      </Text>
+                      <Text style={[st.animalInitials, { color: T.verdeOscuro }]}>{initials}</Text>
                     </View>
 
                     {/* Info */}
                     <View style={st.animalInfo}>
-                      <Text
-                        style={[st.animalNombre, { color: T.txtMain }]}
-                        numberOfLines={1}
-                      >
-                        {animal.nombre}
+                      <Text style={[st.animalNombre, { color: T.txtMain }]} numberOfLines={1}>
+                        {animal.displayNombre}
                       </Text>
-                      <Text
-                        style={[st.animalSub, { color: T.txtSec }]}
-                        numberOfLines={1}
-                      >
-                        {animal.collar?.id ?? "—"} · {animal.raza}
+                      <Text style={[st.animalSub, { color: T.txtSec }]} numberOfLines={1}>
+                        {animal.collarId} · {animal.raza}
                       </Text>
-                      {animal.ubicacion && (
-                        <Text
-                          style={[st.animalCoords, { color: T.txtTer }]}
-                          numberOfLines={1}
-                        >
-                          {animal.ubicacion.lat.toFixed(5)}, {animal.ubicacion.lng.toFixed(5)}
+                      {/* Health indicator */}
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 }}>
+                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: `rgb(${animal.salud.r},${animal.salud.g},${animal.salud.b})` }} />
+                        <Text style={[st.animalCoords, { color: saludColor[animal.salud.sensor] }]}>
+                          {animal.salud.label}
                         </Text>
-                      )}
+                        {(animal.estadoCollar === "cortado" || animal.estadoCollar === "retirado") && (
+                          <Text style={[st.animalCoords, { color: T.rojo }]}>• ⚠ Collar</Text>
+                        )}
+                      </View>
                     </View>
 
                     {/* Status + battery */}
                     <View style={st.animalRight}>
                       <View style={st.animalStatus}>
-                        <View
-                          style={[
-                            st.statusDot,
-                            { backgroundColor: statusColor },
-                          ]}
-                        />
-                        <Text
-                          style={[st.statusTxt, { color: statusColor }]}
-                        >
-                          {statusLabel}
-                        </Text>
+                        <View style={[st.statusDot, { backgroundColor: statusColor }]} />
+                        <Text style={[st.statusTxt, { color: statusColor }]}>{statusLabel}</Text>
                       </View>
                       <View style={st.batRow}>
-                        <View
-                          style={[
-                            st.batBar,
-                            { backgroundColor: T.borde },
-                          ]}
-                        >
-                          <View
-                            style={[
-                              st.batFill,
-                              {
-                                width: `${batPct}%` as any,
-                                backgroundColor:
-                                  batPct > 50
-                                    ? T.verde
-                                    : batPct > 20
-                                    ? T.naranja
-                                    : T.rojo,
-                              },
-                            ]}
-                          />
+                        <View style={[st.batBar, { backgroundColor: T.borde }]}>
+                          <View style={[st.batFill, {
+                            width: `${batPct}%` as any,
+                            backgroundColor: batPct > 50 ? T.verde : batPct > 20 ? T.naranja : T.rojo,
+                          }]} />
                         </View>
-                        <Text style={[st.batPct, { color: T.txtTer }]}>
-                          {batPct}%
-                        </Text>
+                        <Text style={[st.batPct, { color: T.txtTer }]}>{batPct}%</Text>
                       </View>
                     </View>
                   </View>

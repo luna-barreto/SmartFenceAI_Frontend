@@ -43,15 +43,18 @@ const MapaOSM = forwardRef<MapaOSMHandle, Props>(function MapaOSM({
   function onLoad() {
     listaRef.current = true;
 
-    // Vista inicial
-    if (centro.lat && centro.lng) {
-      webviewRef.current?.injectJavaScript(
-        `window.moverVista && window.moverVista(${centro.lat}, ${centro.lng}, ${zoom}); true;`
-      );
-    }
-    // Cerca actual
+    // Cerca actual — usar fitBounds si hay puntos para que el polígono quede visible
     const coords = JSON.stringify(cerca.map(p => [p.lat, p.lng]));
-    webviewRef.current?.injectJavaScript(`window.actualizarCerca && window.actualizarCerca(${coords}); true;`);
+    if (cerca.length > 1) {
+      webviewRef.current?.injectJavaScript(`window.actualizarCerca && window.actualizarCerca(${coords}, true); true;`);
+    } else {
+      if (centro.lat && centro.lng) {
+        webviewRef.current?.injectJavaScript(
+          `window.moverVista && window.moverVista(${centro.lat}, ${centro.lng}, ${zoom}); true;`
+        );
+      }
+      webviewRef.current?.injectJavaScript(`window.actualizarCerca && window.actualizarCerca(${coords}); true;`);
+    }
     // Animales
     webviewRef.current?.injectJavaScript(
       `window.actualizarAnimales && window.actualizarAnimales(${JSON.stringify(animales)}); true;`
@@ -69,10 +72,11 @@ const MapaOSM = forwardRef<MapaOSMHandle, Props>(function MapaOSM({
   // Actualizaciones reactivas (solo después de que el mapa esté listo)
   React.useEffect(() => {
     if (!centro.lat || !centro.lng) return;
+    if (editando) return; // no mover la vista mientras el usuario arrastra vértices
     webviewRef.current?.injectJavaScript(
       `window.moverVista && window.moverVista(${centro.lat}, ${centro.lng}, ${zoom}); true;`
     );
-  }, [centro.lat, centro.lng]);
+  }, [centro.lat, centro.lng, editando]);
 
   React.useEffect(() => {
     if (editando) return; // WebView mantiene su propio estado durante la edición
@@ -160,10 +164,17 @@ const MapaOSM = forwardRef<MapaOSMHandle, Props>(function MapaOSM({
 
   // Empuja el estado completo actual al iframe.
   function initIframe() {
-    const c = centroRef.current;
-    if (c.lat && c.lng)
-      sendToIframe({ tipo: "moverVista", lat: c.lat, lng: c.lng, zoom: zoomRef.current });
-    sendToIframe({ tipo: "actualizarCerca", coords: cercaRef.current.map(p => [p.lat, p.lng]) });
+    const coords = cercaRef.current.map(p => [p.lat, p.lng]);
+    // Enviar la cerca con fitView=true para que el mapa se ajuste al polígono.
+    // Solo hacer moverVista si no hay cerca (para no solapar el fitBounds).
+    if (coords.length > 1) {
+      sendToIframe({ tipo: "actualizarCerca", coords, fitView: true });
+    } else {
+      const c = centroRef.current;
+      if (c.lat && c.lng)
+        sendToIframe({ tipo: "moverVista", lat: c.lat, lng: c.lng, zoom: zoomRef.current });
+      sendToIframe({ tipo: "actualizarCerca", coords });
+    }
     sendToIframe({ tipo: "actualizarAnimales", animales: animalesRef.current });
     sendToIframe({ tipo: "setEditando", valor: editandoRef.current });
     const u = ubicacionRef.current;
@@ -211,8 +222,9 @@ const MapaOSM = forwardRef<MapaOSMHandle, Props>(function MapaOSM({
 
   React.useEffect(() => {
     if (Platform.OS !== "web" || !iframeReadyRef.current || !centro.lat || !centro.lng) return;
+    if (editando) return; // no mover la vista mientras el usuario arrastra vértices
     sendToIframe({ tipo: "moverVista", lat: centro.lat, lng: centro.lng, zoom });
-  }, [centro.lat, centro.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [centro.lat, centro.lng, editando]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (Platform.OS !== "web" || !iframeReadyRef.current || !ubicacionUsuario) return;

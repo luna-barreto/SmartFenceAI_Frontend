@@ -15,7 +15,7 @@ config.cacheStores = [
   }),
 ];
 
-// 4 workers — balance entre velocidad de compilación y uso de RAM
-config.maxWorkers = 4;
+// 6 workers — aprovecha los 8 threads lógicos disponibles
+config.maxWorkers = 6;
 
 module.exports = withNativeWind(config, { input: "./src/styles/global.css" });
