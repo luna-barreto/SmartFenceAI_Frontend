@@ -45,7 +45,7 @@ jobs:
         with:
           context: SmartFence
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart-fence-ui:integration
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart-fence:integration-ui
           build-args: |
             EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
             EXPO_PUBLIC_API_URL=${{ secrets.EXPO_PUBLIC_API_URL }}
