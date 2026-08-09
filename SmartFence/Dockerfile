@@ -4,10 +4,11 @@ WORKDIR /app
 
 # Install deps (all, including devDeps for build)
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
-# Copy source and build web bundle
+# Copy source and run postinstall now that scripts/ is available
 COPY . .
+RUN npm run postinstall
 
 ARG EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
 ARG EXPO_PUBLIC_API_URL
