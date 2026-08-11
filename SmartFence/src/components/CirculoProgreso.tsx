@@ -14,27 +14,37 @@ interface Props {
 export default function CirculoProgreso({
   tamaño, grosor, duracionMs, colorFondo, colorProgreso, onCompletar,
 }: Props) {
-  const radio    = (tamaño - grosor) / 2;
-  const circunf  = 2 * Math.PI * radio;
-  const cx       = tamaño / 2;
-  const cy       = tamaño / 2;
+  const radio   = (tamaño - grosor) / 2;
+  const circunf = 2 * Math.PI * radio;
+  const cx      = tamaño / 2;
+  const cy      = tamaño / 2;
 
   const [progreso, setProgreso] = useState(0);
   const completado = useRef(false);
-  const startRef   = useRef(0);
+  const startRef   = useRef<number | null>(null);
+  const rafRef     = useRef<number>(0);
 
   useEffect(() => {
-    startRef.current = Date.now();
-    const id = setInterval(() => {
-      const p = Math.min(1, (Date.now() - startRef.current) / duracionMs);
+    // Resetear en cada ejecución del efecto (soporta React Strict Mode)
+    startRef.current   = null;
+    completado.current = false;
+
+    function tick(ts: number) {
+      if (startRef.current === null) startRef.current = ts;
+      const p = Math.min(1, (ts - startRef.current) / duracionMs);
       setProgreso(p);
-      if (p >= 1 && !completado.current) {
-        completado.current = true;
-        clearInterval(id);
-        onCompletar();
+      if (p >= 1) {
+        if (!completado.current) {
+          completado.current = true;
+          onCompletar();
+        }
+        return;
       }
-    }, 32);
-    return () => clearInterval(id);
+      rafRef.current = requestAnimationFrame(tick);
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
   }, []);
 
   const pct    = Math.round(progreso * 100);
@@ -43,9 +53,7 @@ export default function CirculoProgreso({
   return (
     <View style={{ width: tamaño, height: tamaño, alignItems: "center", justifyContent: "center" }}>
       <Svg width={tamaño} height={tamaño} style={StyleSheet.absoluteFill}>
-        {/* Pista */}
         <Circle cx={cx} cy={cy} r={radio} stroke={colorFondo} strokeWidth={grosor} fill="none" />
-        {/* Progreso */}
         <Circle
           cx={cx} cy={cy} r={radio}
           stroke={colorProgreso} strokeWidth={grosor} fill="none"

@@ -9,7 +9,7 @@ import {
   FileText, Cpu, type LucideIcon,
 } from "lucide-react-native";
 import Svg, { Path, Polyline, Circle as SvgCircle } from "react-native-svg";
-import { useAnimals, CERCA_DEMO } from "@hooks/useAnimals";
+import { useAnimals } from "@hooks/useAnimals";
 import { useAnimalsCtx } from "@context/AnimalsContext";
 import { useAuth } from "@context/AuthContext";
 import { useT } from "@context/ThemeContext";
@@ -22,7 +22,7 @@ import MapaOSM, { MapaOSMHandle } from "@components/MapaOSM";
 import { navigateTo } from "@navigation/navigationRef";
 import { centroDe } from "@utils/geo";
 import {
-  STATS_DEMO, ALERTAS_DEMO, CENTRO_DEMO, ANIMALES_DEMO,
+  STATS_DEMO, ALERTAS_DEMO, CENTRO_DEMO, CERCA_DEMO, ANIMALES_DEMO,
   tiempoRelativoCorto as demoTiempoCorto,
 } from "@/demo/demoData";
 
@@ -265,27 +265,46 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}>
 
           {/* ── Hero banner ── */}
-          <View style={st.heroBanner}>
-            <Image source={require("../../assets/vaca 3.png")}
-              style={st.heroImg} resizeMode="cover" />
+          <View style={[st.heroBanner, { height: isLg ? 245 : isSm ? 155 : 200 }]}>
+            <Image
+              source={require("../../assets/vaca 32.png")}
+              style={st.heroImg}
+              resizeMode="cover"
+            />
             <View style={st.heroOverlay} />
-            <View style={st.heroContent}>
-              <Text style={st.heroTitle}>Monitorea. Protege. Optimiza.</Text>
-              <Text style={st.heroSub}>Inteligencia que cuida tu ganado en tiempo real.</Text>
-              <View style={[st.conectadoBadge, {
-                backgroundColor: conectado ? "rgba(118,192,67,0.18)" : "rgba(255,87,87,0.18)",
-                borderColor: conectado ? T.verde : T.rojo,
-              }]}>
-                <View style={[st.conectadoDot, { backgroundColor: conectado ? T.verde : T.rojo }]} />
-                <Text style={[st.conectadoTxt, { color: conectado ? T.verdeBrillo : T.rojo }]}>
-                  {conectado ? "Conectado" : "Sin señal"}
+            <View style={[st.heroContent, { padding: isLg ? 22 : 14, gap: 6 }]}>
+              <Text style={[
+                st.heroTitle,
+                { fontSize: isLg ? 28 : isSm ? 18 : 23, lineHeight: isLg ? 36 : isSm ? 24 : 30 },
+              ]}>
+                Monitorea. Protege. Optimiza.
+              </Text>
+              <Text style={[
+                st.heroSub,
+                { fontSize: isLg ? 15 : isSm ? 12 : 13 },
+              ]}>
+                Inteligencia que cuida tu ganado en tiempo real.
+              </Text>
+              <View style={[
+                st.conectadoBadge,
+                {
+                  backgroundColor: "rgba(255,255,255,0.15)",
+                  borderColor: "rgba(255,255,255,0.4)",
+                  marginTop: 2,
+                },
+              ]}>
+                <View style={[st.conectadoDot, {
+                  backgroundColor: conectado ? "#76C043" : "#EF4444",
+                }]} />
+                <Text style={[st.conectadoTxt, { color: "#fff" }]}>
+                  {conectado ? "Conectado" : "Sin conexión"}
                 </Text>
               </View>
             </View>
           </View>
 
           {/* ── 4 Stat cards ── */}
-          <View style={[st.statsRow, (isMd && !isSm) && { flexWrap: "wrap" }, isSm && { flexWrap: "wrap", gap: 10 }]}>
+          <View style={st.statsRow}>
             <StatCard T={T} icono={CowIcon as IconComp}
               valor={animales.length || STATS_DEMO.totalAnimales} etiqueta="Ganado activo"
               color={T.verde} fondo={T.verdeAlfa} sparkline sparklineUp sub="↑ 12% vs. ayer" />
@@ -446,14 +465,14 @@ const st = StyleSheet.create({
   root:          { flex: 1, flexDirection: "row" },
   main:          { flex: 1, flexDirection: "column" },
   scroll:        { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 32, gap: 20 },
+  scrollContent: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 80, gap: 16 },
 
   // Hero
-  heroBanner:  { height: 180, borderRadius: 18, overflow: "hidden" },
+  heroBanner:  { height: 150, borderRadius: 14, overflow: "hidden" },
   heroImg:     { position: "absolute", top: 0, left: 0, width: "100%", height: "100%" },
   heroOverlay: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", backgroundColor: "rgba(0,0,0,0.25)" },
-  heroContent: { position: "absolute", bottom: 0, left: 0, padding: 24, gap: 6 },
-  heroTitle:   { fontSize: 26, fontWeight: "900", color: "#fff", lineHeight: 32 },
+  heroContent: { position: "absolute", bottom: 0, left: 0, padding: 14, gap: 4 },
+  heroTitle:   { fontSize: 20, fontWeight: "900", color: "#fff", lineHeight: 26 },
   heroSub:     { fontSize: 13, color: "rgba(255,255,255,0.9)" },
   conectadoBadge: {
     flexDirection: "row", alignItems: "center", gap: 6,
@@ -464,8 +483,8 @@ const st = StyleSheet.create({
   conectadoTxt: { fontSize: 12, fontWeight: "700" },
 
   // Stats
-  statsRow: { flexDirection: "row", gap: 14 },
-  statCard: { flex: 1, borderRadius: 16, padding: 14, borderWidth: 1, minWidth: 140 },
+  statsRow: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+  statCard: { flex: 1, borderRadius: 16, padding: 12, borderWidth: 1, minWidth: 130 },
   statTop:  { flexDirection: "row", alignItems: "center", gap: 10 },
   statIconBox: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   statValor:    { fontSize: 20, fontWeight: "900", lineHeight: 24 },

@@ -9,6 +9,7 @@
     "android": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start --android",
     "ios": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start --ios",
     "web": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start --web --no-dev --minify",
+    "web:dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start --web",
     "lint": "eslint . --ext .ts,.tsx"
   },
   "dependencies": {

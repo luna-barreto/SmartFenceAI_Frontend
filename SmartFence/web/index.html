@@ -5,8 +5,23 @@
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>SmartFence AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Sora:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <style>
       html, body { height: 100%; margin: 0; padding: 0; background: #173B1A; }
+
+      /* ── Tipografía global ── */
+      body, body * {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      /* Sora para títulos y valores destacados (bold) */
+      [style*="font-weight: 600"],
+      [style*="font-weight: 700"],
+      [style*="font-weight: 800"],
+      [style*="font-weight: 900"] {
+        font-family: 'Sora', sans-serif !important;
+      }
       #root { display: flex; height: 100%; flex: 1; }
 
       #sf-splash {
@@ -35,7 +50,7 @@
 
       .sf-label {
         color: #A8CB88;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 14px;
         letter-spacing: 0.5px;
       }

@@ -176,10 +176,10 @@ export const ANIMALES_DEMO: AnimalDemo[] = [
   {
     id: "d-12", nombre: "Luna", displayNombre: "Vaca 12", identificacion: "VAC-112",
     categoria: "Vaca", raza: "Brahman", edad: "4.5 años", genero: "♀", potrero: "Potrero Sur",
-    // ⚠️ ANIMAL FUERA DE LA CERCA — escenario "animal suelto"
-    estado: "fuera", estadoCollar: "en_linea", salud: SALUD_AMARILLO,
+    // ⚠️ ANIMAL FUERA DE LA CERCA — escenario "animal suelto" (animación la saca y la regresa)
+    estado: "dentro", estadoCollar: "en_linea", salud: SALUD_AMARILLO,
     bateria: 66, señal: "Buena", collarId: "COL-1012",
-    ubicacion: coord(-0.025, 0.022), dentroDeCerca: false, ultimaVez: "Hace 2 min", peso: 490,
+    ubicacion: coord(-0.0024, 0.0019), dentroDeCerca: true, ultimaVez: "Hace 2 min", peso: 490,
   },
   {
     id: "d-13", nombre: "Aurora", displayNombre: "Vaca 13", identificacion: "VAC-113",
@@ -192,10 +192,10 @@ export const ANIMALES_DEMO: AnimalDemo[] = [
   {
     id: "d-14", nombre: "Reina", displayNombre: "Vaca 14", identificacion: "VAC-114",
     categoria: "Vaca", raza: "Gyr", edad: "5 años", genero: "♀", potrero: "Potrero Oeste",
-    // 🔴 COLLAR CORTADO — escenario "corte de correo" (cable del collar)
-    estado: "fuera", estadoCollar: "cortado", salud: SALUD_AMARILLO,
+    // 🔴 COLLAR CORTADO — escenario "corte de correo" (animación la saca periódicamente)
+    estado: "dentro", estadoCollar: "cortado", salud: SALUD_AMARILLO,
     bateria: 0, señal: "Débil", collarId: "COL-1014",
-    ubicacion: coord(0.015, -0.018), dentroDeCerca: false, ultimaVez: "Hace 18 min", peso: 535,
+    ubicacion: coord(0.0027, -0.0033), dentroDeCerca: true, ultimaVez: "Hace 18 min", peso: 535,
   },
   {
     id: "d-15", nombre: "Perla", displayNombre: "Ternero 15", identificacion: "TER-115",
@@ -231,9 +231,9 @@ export const ALERTAS_DEMO: AlertaDemo[] = [
   // ── ANIMAL SUELTO (FUERA DE LA CERCA) ─────────────────────────────────────
   {
     id: "a-02", tipo: "critica",
-    titulo: "Animal fuera de la cerca virtual",
-    sub: "Luna (VAC-112) • Potrero Sur",
-    desc: "El animal cruzó el perímetro sur hace 2 minutos. Última posición: 10.8747° N, -74.8783° W.",
+    titulo: "Vaca 12 salió de la cerca virtual",
+    sub: "Luna • VAC-112 • Potrero Sur",
+    desc: "Vaca 12 cruzó el perímetro sur hace 2 minutos. Última posición: 10.8747° N, -74.8783° W.",
     fecha: msAgo(1000 * 60 * 2), leida: false, resuelta: false,
     scenarioTag: "animal_suelto",
   },
@@ -249,9 +249,9 @@ export const ALERTAS_DEMO: AlertaDemo[] = [
   // ── SENSOR DE COLOR — SALUD CRÍTICA ───────────────────────────────────────
   {
     id: "a-04", tipo: "critica",
-    titulo: "Sensor de color: posible anemia (Aurora)",
-    sub: "Aurora (VAC-113) • Collar COL-1013",
-    desc: "El sensor de calor detectó mucosa pálida (R:220 G:100 B:95). Índice de salud: CRÍTICO. Requiere atención veterinaria inmediata.",
+    titulo: "Vaca 13 enferma — anemia detectada",
+    sub: "Aurora • VAC-113 • Collar COL-1013",
+    desc: "Sensor de color detectó mucosa muy pálida (R:220 G:100 B:95). Índice de salud: CRÍTICO. Requiere atención veterinaria inmediata.",
     fecha: msAgo(1000 * 60 * 12), leida: false, resuelta: false,
     scenarioTag: "sensor_color",
   },
@@ -267,9 +267,9 @@ export const ALERTAS_DEMO: AlertaDemo[] = [
   // ── SENSOR COLOR — ATENCIÓN ────────────────────────────────────────────────
   {
     id: "a-06", tipo: "advertencia",
-    titulo: "Sensor de color: mucosa pálida (Estrella)",
-    sub: "Estrella (VAC-103) • Collar COL-1003",
-    desc: "El sensor de calor detectó leve palidez en mucosa (R:230 G:200 B:110). Seguimiento recomendado.",
+    titulo: "Vaca 03 — mucosa pálida (sensor de color)",
+    sub: "Estrella • VAC-103 • Collar COL-1003",
+    desc: "Sensor de color detectó leve palidez en mucosa (R:230 G:200 B:110). Seguimiento veterinario recomendado.",
     fecha: msAgo(1000 * 60 * 40), leida: false, resuelta: false,
     scenarioTag: "sensor_color",
   },
@@ -300,9 +300,9 @@ export const ALERTAS_DEMO: AlertaDemo[] = [
   // ── SENSOR COLOR — NIEVE ATENCIÓN ─────────────────────────────────────────
   {
     id: "a-10", tipo: "advertencia",
-    titulo: "Sensor de color: atención (Nieve)",
-    sub: "Nieve (VAC-111) • Collar COL-1011",
-    desc: "El sensor de calor indica leve variación en tonalidad de mucosa. Monitorear en próximas 24 h.",
+    titulo: "Vaca 11 — atención, variación en mucosa",
+    sub: "Nieve • VAC-111 • Collar COL-1011",
+    desc: "Sensor de color indica leve variación en tonalidad de mucosa. Monitorear en próximas 24 h.",
     fecha: msAgo(1000 * 60 * 110), leida: false, resuelta: false,
     scenarioTag: "sensor_color",
   },

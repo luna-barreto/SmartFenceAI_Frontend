@@ -29,9 +29,8 @@ import Svg, { Polyline, Circle as SvgCircle } from "react-native-svg";
 import { useT } from "@context/ThemeContext";
 import WebSidebar from "@components/WebSidebar";
 import WebTopBar from "@components/WebTopBar";
+import { useDemoSim } from "@context/DemoSimContext";
 import {
-  ALERTAS_DEMO,
-  STATS_DEMO,
   tiempoRelativo,
   type AlertaDemo,
   type AlertaTipo,
@@ -82,7 +81,11 @@ function StatCard({
 }
 
 // ─── Alert Row ────────────────────────────────────────────────────────────────
-function AlertRow({ alerta, T }: { alerta: AlertaDemo; T: ReturnType<typeof useT> }) {
+function AlertRow({
+  alerta, T, esNueva,
+}: {
+  alerta: AlertaDemo; T: ReturnType<typeof useT>; esNueva?: boolean;
+}) {
   const cfg: Record<AlertaTipo, { bg: string; color: string; Icon: React.ComponentType<any> }> = {
     critica:     { bg: T.rojoBg,    color: T.rojo,    Icon: BellRing      },
     advertencia: { bg: T.naranjaBg, color: T.naranja, Icon: TriangleAlert },
@@ -91,7 +94,6 @@ function AlertRow({ alerta, T }: { alerta: AlertaDemo; T: ReturnType<typeof useT
   };
   const { bg, color, Icon } = cfg[alerta.tipo];
 
-  // Override icon for special scenarios
   let OverrideIcon: React.ComponentType<any> | null = null;
   if (alerta.scenarioTag === "corte_correo") OverrideIcon = Scissors;
   if (alerta.scenarioTag === "sensor_color") OverrideIcon = Droplets;
@@ -106,6 +108,7 @@ function AlertRow({ alerta, T }: { alerta: AlertaDemo; T: ReturnType<typeof useT
         st.alertRow,
         { backgroundColor: T.card, borderBottomColor: T.borde },
         !alerta.leida && { borderLeftWidth: 3, borderLeftColor: color },
+        esNueva && { backgroundColor: `${color}0D` },
       ]}
     >
       <View style={[st.alertIconBox, { backgroundColor: bg }]}>
@@ -113,9 +116,16 @@ function AlertRow({ alerta, T }: { alerta: AlertaDemo; T: ReturnType<typeof useT
       </View>
 
       <View style={{ flex: 1 }}>
-        <Text style={[st.alertTitle, { color: T.txtMain }]} numberOfLines={1}>
-          {alerta.titulo}
-        </Text>
+        <View style={st.alertTitleRow}>
+          <Text style={[st.alertTitle, { color: T.txtMain, flex: 1 }]} numberOfLines={1}>
+            {alerta.titulo}
+          </Text>
+          {esNueva && (
+            <View style={[st.nuevoBadge, { backgroundColor: color }]}>
+              <Text style={st.nuevoBadgeTxt}>NUEVO</Text>
+            </View>
+          )}
+        </View>
         <Text style={[st.alertSub, { color: T.txtSec }]} numberOfLines={1}>
           {alerta.sub}
         </Text>
@@ -175,14 +185,13 @@ function ScenarioLegend({ T }: { T: ReturnType<typeof useT> }) {
 export default function AlertsScreen() {
   const T = useT();
   const [tab, setTab] = useState("todas");
+  const { alertas, stats, nuevasIds } = useDemoSim();
 
-  const alertas = ALERTAS_DEMO;
-
-  const criticas     = STATS_DEMO.alertasCriticas;
-  const advertencias = STATS_DEMO.alertasAdvertencia;
-  const informativas = STATS_DEMO.alertasInformativas;
-  const intrusos     = STATS_DEMO.alertasIntruso;
-  const resueltas    = STATS_DEMO.resueltas;
+  const criticas     = stats.alertasCriticas;
+  const advertencias = stats.alertasAdvertencia;
+  const informativas = stats.alertasInformativas;
+  const intrusos     = stats.alertasIntruso;
+  const resueltas    = stats.resueltas;
   const noLeidas     = alertas.filter((a) => !a.leida).length;
 
   const alertasFiltradas = alertas.filter((a) => {
@@ -196,7 +205,7 @@ export default function AlertsScreen() {
     <TouchableOpacity activeOpacity={0.75}
       style={[st.configBtn, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
       <Settings size={14} color={T.txtMain} strokeWidth={1.8} />
-      <Text style={[st.configTxt, { color: T.txtMain }]}>Configuración de alertas</Text>
+      <Text style={[st.configTxt, { color: T.txtMain }]}>Configuración</Text>
     </TouchableOpacity>
   );
 
@@ -220,21 +229,6 @@ export default function AlertsScreen() {
           {/* ── LEFT MAIN ── */}
           <ScrollView style={{ flex: 1 }} contentContainerStyle={st.leftContent}
             showsVerticalScrollIndicator={false}>
-
-            {/* Banner: intruso activo */}
-            {intrusos > 0 && (
-              <View style={[st.intrusoBanner, { backgroundColor: "rgba(147,51,234,0.10)", borderColor: "#9333ea" }]}>
-                <UserX size={18} color="#9333ea" strokeWidth={2} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[st.intrusoBannerTitle, { color: "#9333ea" }]}>
-                    Alerta de intruso activa
-                  </Text>
-                  <Text style={[st.intrusoBannerSub, { color: T.txtSec }]}>
-                    Se detectó movimiento no identificado en el perímetro. Revisar zona noreste.
-                  </Text>
-                </View>
-              </View>
-            )}
 
             {/* 5 stat cards */}
             <View style={[st.statsRow, isMd && { flexWrap: "wrap" }]}>
@@ -279,11 +273,19 @@ export default function AlertsScreen() {
             {/* Alert list */}
             <View style={[st.alertList, { backgroundColor: T.card, borderColor: T.borde }]}>
               <View style={[st.sectionHeader, { backgroundColor: T.cardElevada }]}>
-                <Text style={[st.sectionHeaderTxt, { color: T.txtSec }]}>HOY — MODO DEMO</Text>
+                <View style={st.sectionHeaderRow}>
+                  <Text style={[st.sectionHeaderTxt, { color: T.txtSec }]}>TIEMPO REAL</Text>
+                  <View style={[st.liveDot, { backgroundColor: T.verde }]} />
+                </View>
               </View>
 
               {alertasFiltradas.map((alerta) => (
-                <AlertRow key={alerta.id} alerta={alerta} T={T} />
+                <AlertRow
+                  key={alerta.id}
+                  alerta={alerta}
+                  T={T}
+                  esNueva={nuevasIds.has(alerta.id)}
+                />
               ))}
 
               <TouchableOpacity activeOpacity={0.75}
@@ -344,7 +346,7 @@ const st = StyleSheet.create({
   root: { flex: 1, flexDirection: "row" },
   main: { flex: 1, flexDirection: "column" },
   contentRow: { flex: 1, flexDirection: "row" },
-  leftContent: { paddingHorizontal: 28, paddingTop: 20, paddingBottom: 24 },
+  leftContent: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 80 },
 
   // Intruso banner
   intrusoBanner: {
@@ -355,8 +357,8 @@ const st = StyleSheet.create({
   intrusoBannerSub:   { fontSize: 12 },
 
   // Stat cards
-  statsRow: { flexDirection: "row", gap: 12, marginBottom: 20, flexWrap: "wrap" },
-  statCard: { flex: 1, minWidth: 120, borderRadius: 14, borderWidth: 1, padding: 14 },
+  statsRow: { flexDirection: "row", gap: 10, marginBottom: 16, flexWrap: "wrap" },
+  statCard: { flex: 1, minWidth: 110, borderRadius: 14, borderWidth: 1, padding: 12 },
   statIconBox: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   statNumber: { fontSize: 28, fontWeight: "900", lineHeight: 32 },
   statLabel:  { fontSize: 12, fontWeight: "700", marginTop: 2 },
@@ -375,6 +377,7 @@ const st = StyleSheet.create({
   sectionHeaderTxt: { fontSize: 11, fontWeight: "700", letterSpacing: 0.6 },
   alertRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1 },
   alertIconBox: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  alertTitleRow: { flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" },
   alertTitle: { fontSize: 13, fontWeight: "700" },
   alertSub:   { fontSize: 11, marginTop: 2 },
   alertDesc:  { fontSize: 11, marginTop: 2, lineHeight: 16 },
@@ -382,6 +385,10 @@ const st = StyleSheet.create({
   tiempoBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   tiempoTxt:   { fontSize: 10, fontWeight: "700" },
   unreadDot:   { width: 8, height: 8, borderRadius: 4 },
+  nuevoBadge:  { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  nuevoBadgeTxt: { fontSize: 9, fontWeight: "900", color: "#fff", letterSpacing: 0.5 },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  liveDot: { width: 7, height: 7, borderRadius: 4 },
   loadMoreBtn: { paddingVertical: 14, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 6, borderTopWidth: 1 },
   loadMoreTxt: { fontSize: 13, fontWeight: "600" },
 

@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   useWindowDimensions,
+  Platform,
 } from "react-native";
 import {
   Plus,
@@ -59,6 +60,8 @@ export default function MapScreen() {
   const { width } = useWindowDimensions();
   const isMd = width < 1100;
   const isSm = width < 768;
+  // Mobile: stack layout (stat tiles + map + info panel)
+  const isMobile = isSm || (Platform.OS === "web" && width < 640);
   const [busqueda, setBusqueda] = useState("");
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -233,6 +236,199 @@ export default function MapScreen() {
     </View>
   );
 
+  // ── Shared map block ────────────────────────────────────────────────────────
+  const mapBlock = (
+    <View style={isMobile ? st.mapAreaMobile : st.mapArea}>
+      <MapaOSM
+        ref={mapaRef}
+        animales={animalesParaMapa}
+        cerca={cerca}
+        centro={centro}
+        editando={editando}
+        onGuardarCerca={guardarCerca}
+        ubicacionUsuario={ubicacionUsuario}
+      />
+
+      {/* Botones de edición */}
+      {!editando ? (
+        <View style={st.mapActionsRow}>
+          <TouchableOpacity
+            style={[st.btnEditar, { backgroundColor: T.card, borderColor: T.borde }]}
+            onPress={iniciarEdicion}
+            activeOpacity={0.85}
+          >
+            <Pencil size={14} color={T.txtMain} strokeWidth={2} />
+            <Text style={[st.btnEditarTxt, { color: T.txtMain }]}>Editar cerca</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={st.editBannerWeb}>
+          <View style={[st.editBannerInner, { backgroundColor: T.verdeOscuro }]}>
+            <Text style={st.editBannerTxt}>Arrastra los puntos para editar</Text>
+            <TouchableOpacity
+              style={st.editCancelBtn}
+              onPress={cancelarEdicion}
+              activeOpacity={0.8}
+              disabled={guardando}
+            >
+              <Text style={st.editCancelTxt}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[st.editSaveBtn, guardando && { opacity: 0.6 }]}
+              onPress={confirmarGuardado}
+              activeOpacity={0.8}
+              disabled={guardando}
+            >
+              {guardando
+                ? <ActivityIndicator size="small" color={T.verdeOscuro} />
+                : <><Check size={13} color={T.verdeOscuro} strokeWidth={3} /><Text style={[st.editSaveTxt, { color: T.verdeOscuro }]}>Guardar</Text></>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Guardando */}
+      {guardando && (
+        <View style={[st.savingBadge, { backgroundColor: T.card, borderColor: T.borde }]}>
+          <ActivityIndicator size="small" color={T.verde} />
+          <Text style={[st.savingTxt, { color: T.txtMain }]}>Guardando…</Text>
+        </View>
+      )}
+
+      {/* Legend pill on map */}
+      <View style={[st.mapPill, { backgroundColor: T.card }]}>
+        <View style={[st.pillDot, { backgroundColor: T.verde }]} />
+        <Text style={[st.pillTxt, { color: T.txtMain }]}>
+          Dentro ({dentroCount})
+        </Text>
+        <View style={[st.pillDot, { backgroundColor: T.rojo }]} />
+        <Text style={[st.pillTxt, { color: T.txtMain }]}>
+          Fuera ({fueraCount})
+        </Text>
+        <View style={[st.pillDot, { backgroundColor: T.azul }]} />
+        <Text style={[st.pillTxt, { color: T.txtMain }]}>Dispositivo</Text>
+      </View>
+    </View>
+  );
+
+  // ── MOBILE layout ────────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <View style={[st.root, { backgroundColor: T.fondo }]}>
+        <View style={st.main}>
+          {/* Top bar sin sidebar */}
+          <WebTopBar
+            titulo="Cerca virtual"
+            sub="Monitoreo GPS en tiempo real"
+            rightContent={null}
+          />
+
+          <ScrollView
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 24 }}
+          >
+            {/* ── Stat tiles 2×2 ── */}
+            <View style={[st.mobileTilesRow, { paddingHorizontal: 12, paddingTop: 12 }]}>
+              <MobileTile
+                Icon={ShieldCheck}
+                iconColor={T.verde}
+                iconBg={T.verdeAlfa}
+                label="Animales"
+                valor={String(listaAnimales.length)}
+                sub="Total"
+                valorColor={T.txtMain}
+              />
+              <MobileTile
+                Icon={TriangleAlert}
+                iconColor={T.rojo}
+                iconBg="rgba(239,68,68,0.12)"
+                label="Fuera de la cerca"
+                valor={String(fueraCount)}
+                sub="En este momento"
+                valorColor={T.rojo}
+              />
+              <MobileTile
+                Icon={TriangleAlert}
+                iconColor={T.naranja}
+                iconBg="rgba(245,158,11,0.12)"
+                label="Alertas"
+                valor={String(STATS_DEMO.alertasCriticas + STATS_DEMO.alertasAdvertencia)}
+                sub="Activas"
+                valorColor={T.naranja}
+              />
+              <MobileTile
+                Icon={ShieldCheck}
+                iconColor={T.verde}
+                iconBg={T.verdeAlfa}
+                label="Estado"
+                valor="Activa"
+                sub="Perímetro seguro"
+                valorColor={T.verde}
+              />
+            </View>
+
+            {/* ── Mapa compacto ── */}
+            <View style={[{ paddingHorizontal: 12, paddingTop: 12 }]}>
+              {mapBlock}
+            </View>
+
+            {/* ── Info panel — finca + stats ── */}
+            <View style={[st.mobileInfoPanel, { marginHorizontal: 12, marginTop: 12, backgroundColor: T.card, borderColor: T.borde }]}>
+              {/* Finca row */}
+              <View style={st.mobileInfoHeader}>
+                <View style={[st.mobileInfoIcon, { backgroundColor: T.verdeAlfa }]}>
+                  <ShieldCheck size={20} color={T.verde} strokeWidth={2} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[st.mobileInfoFinca, { color: T.txtMain }]}>Finca El Paraíso</Text>
+                  <Text style={[st.mobileInfoSub, { color: T.txtSec }]}>Potrero Norte</Text>
+                </View>
+              </View>
+
+              <Divider marginVertical={10} />
+
+              {/* Stats row */}
+              <View style={st.mobileStatsRow}>
+                <MobileStatItem label="Área total" valor="45.6 ha" color={T.txtMain} />
+                <MobileStatItem label="Perímetro" valor="2.35 km" color={T.txtMain} />
+                <MobileStatItem label="Animales dentro" valor={String(dentroCount)} color={T.verde} />
+                <MobileStatItem label="Animales fuera" valor={String(fueraCount)} color={T.rojo} />
+              </View>
+            </View>
+
+            {/* ── Botones de acción ── */}
+            <View style={[{ flexDirection: "row", gap: 10, paddingHorizontal: 12, marginTop: 12 }]}>
+              <TouchableOpacity
+                style={[st.mobileBtnSecondary, { flex: 1, borderColor: T.borde, backgroundColor: T.card }]}
+                onPress={iniciarEdicion}
+                activeOpacity={0.85}
+              >
+                <Pencil size={14} color={T.txtMain} strokeWidth={2} />
+                <Text style={[{ fontSize: 13, fontWeight: "700" }, { color: T.txtMain }]}>Editar cerca</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[st.mobileBtnPrimary, { flex: 1, backgroundColor: T.verdeOscuro }]}
+                onPress={() => {
+                  const origen = centroDe(cerca.length ? cerca : CERCA_DEMO);
+                  cercaSnapshotRef.current = cerca;
+                  setCerca(generarPoligonoCentrado(origen, 150));
+                  setEditando(true);
+                }}
+                activeOpacity={0.85}
+              >
+                <Plus size={14} color="#fff" strokeWidth={2.5} />
+                <Text style={{ fontSize: 13, fontWeight: "700", color: "#fff" }}>Nueva geocerca</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    );
+  }
+
+  // ── DESKTOP / TABLET layout ───────────────────────────────────────────────────
   return (
     <View style={[st.root, { backgroundColor: T.fondo }]}>
       {/* ── Sidebar ── */}
@@ -251,7 +447,6 @@ export default function MapScreen() {
         <View style={st.content}>
 
           {/* ── LEFT PANEL — hidden on small screens ── */}
-          {!isSm && (
           <View
             style={[
               st.leftPanel,
@@ -377,84 +572,11 @@ export default function MapScreen() {
               </TouchableOpacity>
             </View>
           </View>
-          )}
 
           {/* ── CENTER MAP ── */}
-          <View style={st.mapArea}>
-            <MapaOSM
-              ref={mapaRef}
-              animales={animalesParaMapa}
-              cerca={cerca}
-              centro={centro}
-              editando={editando}
-              onGuardarCerca={guardarCerca}
-              ubicacionUsuario={ubicacionUsuario}
-            />
+          {mapBlock}
 
-            {/* Botones de edición */}
-            {!editando ? (
-              <View style={st.mapActionsRow}>
-                <TouchableOpacity
-                  style={[st.btnEditar, { backgroundColor: T.card, borderColor: T.borde }]}
-                  onPress={iniciarEdicion}
-                  activeOpacity={0.85}
-                >
-                  <Pencil size={14} color={T.txtMain} strokeWidth={2} />
-                  <Text style={[st.btnEditarTxt, { color: T.txtMain }]}>Editar cerca</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={st.editBannerWeb}>
-                <View style={[st.editBannerInner, { backgroundColor: T.verdeOscuro }]}>
-                  <Text style={st.editBannerTxt}>Arrastra los puntos para editar</Text>
-                  <TouchableOpacity
-                    style={st.editCancelBtn}
-                    onPress={cancelarEdicion}
-                    activeOpacity={0.8}
-                    disabled={guardando}
-                  >
-                    <Text style={st.editCancelTxt}>Cancelar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[st.editSaveBtn, guardando && { opacity: 0.6 }]}
-                    onPress={confirmarGuardado}
-                    activeOpacity={0.8}
-                    disabled={guardando}
-                  >
-                    {guardando
-                      ? <ActivityIndicator size="small" color={T.verdeOscuro} />
-                      : <><Check size={13} color={T.verdeOscuro} strokeWidth={3} /><Text style={[st.editSaveTxt, { color: T.verdeOscuro }]}>Guardar</Text></>
-                    }
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* Guardando */}
-            {guardando && (
-              <View style={[st.savingBadge, { backgroundColor: T.card, borderColor: T.borde }]}>
-                <ActivityIndicator size="small" color={T.verde} />
-                <Text style={[st.savingTxt, { color: T.txtMain }]}>Guardando…</Text>
-              </View>
-            )}
-
-            {/* Legend pill on map */}
-            <View style={[st.mapPill, { backgroundColor: T.card }]}>
-              <View style={[st.pillDot, { backgroundColor: T.verde }]} />
-              <Text style={[st.pillTxt, { color: T.txtMain }]}>
-                Dentro ({dentroCount})
-              </Text>
-              <View style={[st.pillDot, { backgroundColor: T.rojo }]} />
-              <Text style={[st.pillTxt, { color: T.txtMain }]}>
-                Fuera ({fueraCount})
-              </Text>
-              <View style={[st.pillDot, { backgroundColor: T.azul }]} />
-              <Text style={[st.pillTxt, { color: T.txtMain }]}>Dispositivo</Text>
-            </View>
-          </View>
-
-          {/* ── RIGHT PANEL — hidden on small screens ── */}
-          {!isSm && (
+          {/* ── RIGHT PANEL ── */}
           <View
             style={[
               st.rightPanel,
@@ -563,9 +685,44 @@ export default function MapScreen() {
               })}
             </ScrollView>
           </View>
-          )}
         </View>
       </View>
+    </View>
+  );
+}
+
+// ─── MobileTile ───────────────────────────────────────────────────────────────
+function MobileTile({
+  Icon, iconColor, iconBg, label, valor, sub, valorColor,
+}: {
+  Icon: React.ComponentType<{ size: number; color: string; strokeWidth: number }>;
+  iconColor: string;
+  iconBg: string;
+  label: string;
+  valor: string;
+  sub: string;
+  valorColor: string;
+}) {
+  const T = useT();
+  return (
+    <View style={[st.mobileTile, { backgroundColor: T.card, borderColor: T.borde }]}>
+      <View style={[st.mobileTileIcon, { backgroundColor: iconBg }]}>
+        <Icon size={18} color={iconColor} strokeWidth={2} />
+      </View>
+      <Text style={[st.mobileTileLabel, { color: T.txtSec }]}>{label}</Text>
+      <Text style={[st.mobileTileValor, { color: valorColor }]}>{valor}</Text>
+      <Text style={[st.mobileTileSub, { color: sub.toLowerCase().includes("fuera") || sub.toLowerCase().includes("activ") ? valorColor : T.txtTer }]}>{sub}</Text>
+    </View>
+  );
+}
+
+// ─── MobileStatItem ───────────────────────────────────────────────────────────
+function MobileStatItem({ label, valor, color }: { label: string; valor: string; color: string }) {
+  const T = useT();
+  return (
+    <View style={st.mobileStatItem}>
+      <Text style={[st.mobileStatValor, { color }]}>{valor}</Text>
+      <Text style={[st.mobileStatLabel, { color: T.txtSec }]}>{label}</Text>
     </View>
   );
 }
@@ -716,8 +873,8 @@ const st = StyleSheet.create({
     width: 220,
   },
   leftScroll: {
-    paddingHorizontal: 18,
-    paddingTop: 18,
+    paddingHorizontal: 14,
+    paddingTop: 14,
     paddingBottom: 8,
   },
   leftBottom: {
@@ -1050,6 +1207,110 @@ const st = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 6,
   },
   editSaveTxt: { fontSize: 12, fontWeight: "800" },
+
+  // Map area — mobile (fixed height)
+  mapAreaMobile: {
+    height: 300,
+    borderRadius: 16,
+    overflow: "hidden",
+    position: "relative",
+  },
+
+  // Mobile stat tiles grid
+  mobileTilesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  mobileTile: {
+    width: "48%" as any,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 4,
+  },
+  mobileTileIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  mobileTileLabel: {
+    fontSize: 12,
+  },
+  mobileTileValor: {
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  mobileTileSub: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+
+  // Mobile info panel
+  mobileInfoPanel: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+  },
+  mobileInfoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  mobileInfoIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mobileInfoFinca: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  mobileInfoSub: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  mobileStatsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  mobileStatItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  mobileStatValor: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  mobileStatLabel: {
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 2,
+  },
+
+  // Mobile action buttons
+  mobileBtnPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 12,
+    paddingVertical: 13,
+  },
+  mobileBtnSecondary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 13,
+  },
 
   // Saving badge
   savingBadge: {

@@ -15,7 +15,7 @@ config.cacheStores = [
   }),
 ];
 
-// 6 workers — aprovecha los 8 threads lógicos disponibles
-config.maxWorkers = 6;
+// 2 workers — limita RAM; cada worker puede consumir 300-400MB con minificación
+config.maxWorkers = 2;
 
 module.exports = withNativeWind(config, { input: "./src/styles/global.css" });

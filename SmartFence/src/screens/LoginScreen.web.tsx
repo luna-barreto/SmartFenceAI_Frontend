@@ -6,7 +6,6 @@ import {
 import { Mail, Lock, Eye, EyeOff, LogIn, CheckCircle, Shield, BarChart2 } from "lucide-react-native";
 import Svg, { Path } from "react-native-svg";
 import { useAuth } from "@context/AuthContext";
-import { useOAuth, useClerk } from "@clerk/clerk-expo";
 
 const C = {
   green:   "#4F9E2C",
@@ -37,9 +36,6 @@ function AppleIcon() {
 
 export default function LoginScreen() {
   const { iniciarSesion } = useAuth();
-  const { startOAuthFlow: googleOAuth } = useOAuth({ strategy: "oauth_google" });
-  const { startOAuthFlow: appleOAuth }  = useOAuth({ strategy: "oauth_apple" });
-  const { setActive } = useClerk();
   const { width } = useWindowDimensions();
 
   const [correo,        setCorreo]    = useState("");
@@ -50,11 +46,17 @@ export default function LoginScreen() {
 
   // Breakpoints
   const isDesktop = width >= 960;
-  const leftPad   = isDesktop ? 72 : 40;
-  const heroSize  = isDesktop ? 38 : 30;
+  const isMedium  = isDesktop && width < 1280;
+
+  // Panel izquierdo — escala según breakpoint
+  const leftPad          = isMedium ? 36 : 64;
+  const heroSize         = isMedium ? 22 : 30;
+  const brandFontSize    = isMedium ? 16 : 20;
+  const heroSubSize      = isMedium ? 12 : 14;
+  const featureTitleSize = isMedium ? 13 : 14;
+  const featureSubSize   = isMedium ? 11 : 12;
 
   async function handleLogin() {
-    if (!correo) return;
     setErrorMsg(null);
     setCargando(true);
     try {
@@ -66,14 +68,11 @@ export default function LoginScreen() {
     }
   }
 
-  async function manejarOAuth(flow: () => Promise<{ createdSessionId?: string | null }>) {
+  async function loginConProveedor(proveedor: string) {
     setErrorMsg(null);
     setCargando(true);
     try {
-      const { createdSessionId } = await flow();
-      if (createdSessionId) await setActive?.({ session: createdSessionId });
-    } catch (err: any) {
-      setErrorMsg(err?.errors?.[0]?.message ?? "Error al iniciar sesión con proveedor");
+      await iniciarSesion(correo || `Demo ${proveedor}`, "");
     } finally {
       setCargando(false);
     }
@@ -85,43 +84,44 @@ export default function LoginScreen() {
       {/* ══════════════════ PANEL IZQUIERDO (solo desktop) ══════════════════ */}
       {isDesktop && (
         <View style={s.left}>
-          <View style={[s.leftTop, { paddingLeft: leftPad }]}>
-            <View style={s.logoRow}>
+          <View style={[s.leftTop, { paddingLeft: leftPad, paddingRight: isMedium ? 24 : 40 }]}>
+            <View style={[s.logoRow, { marginBottom: isMedium ? 16 : 24 }]}>
               <Image
                 source={require("../../assets/logotipo.png")}
-                style={s.logoImg}
+                style={[s.logoImg, isMedium && { width: 48, height: 48 }]}
                 resizeMode="contain"
               />
               <View>
-                <Text style={s.brandName}>
-                  <Text style={{ color: C.text, fontWeight: "700" }}>SMART</Text>
-                  <Text style={{ color: C.green, fontWeight: "900" }}>FENCE AI</Text>
+                <Text style={[s.brandName, { fontSize: brandFontSize }]}>
+                  <Text style={{ color: C.text, fontWeight: "700" }}>Smart</Text>
+                  <Text style={{ color: C.green, fontWeight: "900" }}>fence</Text>
                 </Text>
-                <Text style={s.brandTagline}>MONITOREA · PROTEGE · OPTIMIZA</Text>
               </View>
             </View>
 
-            <Text style={[s.heroLine1, { fontSize: heroSize, lineHeight: heroSize * 1.25 }]}>
+            <Text style={[s.heroLine1, { fontSize: heroSize, lineHeight: heroSize * 1.28, marginBottom: isMedium ? 8 : 12 }]}>
               {"Inteligencia que cuida\ntu ganado, "}
               <Text style={s.heroGreen}>siempre.</Text>
             </Text>
-            <Text style={s.heroSub}>
-              {"Monitorea en tiempo real la ubicación, salud y actividad\nde tu ganado desde cualquier lugar."}
+            <Text style={[s.heroSub, { fontSize: heroSubSize, marginBottom: isMedium ? 16 : 22 }]}>
+              {isMedium
+                ? "Monitorea ubicación, salud y actividad\nde tu ganado en tiempo real."
+                : "Monitorea en tiempo real la ubicación, salud y actividad\nde tu ganado desde cualquier lugar."}
             </Text>
 
-            <View style={s.features}>
+            <View style={[s.features, { gap: isMedium ? 10 : 14 }]}>
               {([
                 { Icon: Shield,      title: "Monitoreo en tiempo real",  sub: "Conoce dónde está tu ganado en todo momento." },
                 { Icon: CheckCircle, title: "Alertas inteligentes",       sub: "Recibe notificaciones ante cualquier evento importante." },
                 { Icon: BarChart2,   title: "Reportes y análisis",        sub: "Toma mejores decisiones con datos precisos y actualizados." },
               ] as const).map(({ Icon, title, sub }) => (
                 <View key={title} style={s.featureRow}>
-                  <View style={s.featureIconBox}>
-                    <Icon size={17} color={C.green} strokeWidth={2} />
+                  <View style={[s.featureIconBox, isMedium && { width: 34, height: 34 }]}>
+                    <Icon size={isMedium ? 14 : 17} color={C.green} strokeWidth={2} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.featureTitle}>{title}</Text>
-                    <Text style={s.featureSub}>{sub}</Text>
+                    <Text style={[s.featureTitle, { fontSize: featureTitleSize }]}>{title}</Text>
+                    <Text style={[s.featureSub, { fontSize: featureSubSize }]}>{sub}</Text>
                   </View>
                 </View>
               ))}
@@ -156,8 +156,8 @@ export default function LoginScreen() {
                 resizeMode="contain"
               />
               <Text style={s.mobileBrandName}>
-                <Text style={{ color: C.text, fontWeight: "700" }}>SMART</Text>
-                <Text style={{ color: C.green, fontWeight: "900" }}>FENCE AI</Text>
+                <Text style={{ color: C.text, fontWeight: "700" }}>Smart</Text>
+                <Text style={{ color: C.green, fontWeight: "900" }}>fence</Text>
               </Text>
             </View>
           )}
@@ -173,16 +173,17 @@ export default function LoginScreen() {
             </Text>
             <Text style={s.cardSub}>Ingresa para acceder a tu panel de control</Text>
 
-            <Text style={s.fieldLabel}>Correo electrónico</Text>
+            <Text style={s.fieldLabel}>Nombre o correo</Text>
             <View style={s.inputBox}>
               <Mail size={18} color={C.green} strokeWidth={1.8} />
               <TextInput
                 value={correo}
                 onChangeText={setCorreo}
-                placeholder="ejemplo@smartfence.ai"
+                placeholder="Tu nombre o correo electrónico"
                 placeholderTextColor="#9CA3AF"
                 autoCapitalize="none"
                 keyboardType="email-address"
+                returnKeyType="next"
                 style={s.inputField}
               />
             </View>
@@ -196,6 +197,8 @@ export default function LoginScreen() {
                 placeholder="Ingresa tu contraseña"
                 placeholderTextColor="#9CA3AF"
                 secureTextEntry={!verContraseña}
+                returnKeyType="go"
+                onSubmitEditing={handleLogin}
                 style={s.inputField}
               />
               <TouchableOpacity onPress={() => setVer(v => !v)} activeOpacity={0.7}>
@@ -240,11 +243,21 @@ export default function LoginScreen() {
             )}
 
             <View style={s.socialRow}>
-              <TouchableOpacity style={s.socialBtn} activeOpacity={0.75} onPress={() => manejarOAuth(googleOAuth)}>
+              <TouchableOpacity
+                style={s.socialBtn}
+                activeOpacity={0.75}
+                onPress={() => loginConProveedor("Google")}
+                disabled={cargando}
+              >
                 <GoogleIcon />
                 <Text style={s.socialTxt}>Google</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.socialBtn} activeOpacity={0.75} onPress={() => manejarOAuth(appleOAuth)}>
+              <TouchableOpacity
+                style={s.socialBtn}
+                activeOpacity={0.75}
+                onPress={() => loginConProveedor("Apple")}
+                disabled={cargando}
+              >
                 <AppleIcon />
                 <Text style={s.socialTxt}>Apple</Text>
               </TouchableOpacity>
@@ -267,9 +280,7 @@ export default function LoginScreen() {
 }
 
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
+  root: { flex: 1 },
 
   // ── Panel izquierdo — desktop only ──────────────────────────────────────────
   left: {
@@ -279,21 +290,20 @@ const s = StyleSheet.create({
     overflow: "hidden",
   },
   leftTop: {
-    paddingRight: 40,
-    paddingTop: 32,
-    paddingBottom: 20,
+    paddingTop: 28,
+    paddingBottom: 16,
   },
-  logoRow:      { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 24 },
-  logoImg:      { width: 64, height: 64, borderRadius: 14 },
-  brandName:    { fontSize: 22, letterSpacing: 0.3 },
-  brandTagline: { color: "#9CA3AF", fontSize: 9, letterSpacing: 1.6, marginTop: 2 },
+  logoRow:      { flexDirection: "row", alignItems: "center", gap: 12 },
+  logoImg:      { width: 56, height: 56, borderRadius: 12 },
+  brandName:    { letterSpacing: 0.3 },
+  brandTagline: { color: "#9CA3AF", fontSize: 8, letterSpacing: 1.5, marginTop: 2 },
 
-  heroLine1: { fontWeight: "900", color: C.text, marginBottom: 12 },
+  heroLine1: { fontWeight: "900", color: C.text },
   heroGreen: { color: C.green },
-  heroSub:   { color: C.textSec, fontSize: 15, lineHeight: 23, marginBottom: 22 },
+  heroSub:   { color: C.textSec, lineHeight: 20 },
 
-  features:       { gap: 14 },
-  featureRow:     { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  features:       {},
+  featureRow:     { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   featureIconBox: {
     width: 40, height: 40,
     backgroundColor: "rgba(79,158,44,0.09)",
@@ -301,10 +311,10 @@ const s = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     flexShrink: 0,
   },
-  featureTitle: { fontSize: 14, fontWeight: "700", color: C.text },
-  featureSub:   { fontSize: 12, color: C.textSec, marginTop: 2, lineHeight: 17 },
+  featureTitle: { fontWeight: "700", color: C.text },
+  featureSub:   { color: C.textSec, marginTop: 2, lineHeight: 16 },
 
-  imageWrap: { flex: 1, minHeight: 180, overflow: "hidden" },
+  imageWrap: { flex: 1, minHeight: 160, overflow: "hidden" },
   vacasImg:  { flex: 1, width: "100%" },
 
   // ── Panel derecho / formulario ───────────────────────────────────────────────
@@ -314,10 +324,7 @@ const s = StyleSheet.create({
     borderLeftWidth: 1,
     borderLeftColor: "#DDE8DA",
   },
-  // Cuando es la única columna ocupa toda la pantalla y sin borde
-  rightFull: {
-    borderLeftWidth: 0,
-  },
+  rightFull: { borderLeftWidth: 0 },
   rightScroll: {
     flexGrow: 1,
     justifyContent: "center",
@@ -326,7 +333,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 32,
   },
 
-  // Branding compacto para móvil/tablet (cuando el panel izquierdo está oculto)
   mobileHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -350,11 +356,7 @@ const s = StyleSheet.create({
     shadowRadius: 20,
     elevation: 5,
   },
-  // En pantallas pequeñas reducir padding interior de la tarjeta
-  formCardMobile: {
-    padding: 24,
-    borderRadius: 16,
-  },
+  formCardMobile: { padding: 24, borderRadius: 16 },
 
   lockCircle: {
     width: 52, height: 52,

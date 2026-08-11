@@ -1,28 +1,12 @@
 import React, { useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  useWindowDimensions,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  TextInput, useWindowDimensions, Modal,
 } from "react-native";
 import {
-  Search,
-  SlidersHorizontal,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  MapPin,
-  BarChart2,
-  MoreHorizontal,
-  Map,
-  Plus,
-  Droplets,
-  Scissors,
-  UserX,
-  HeartPulse,
+  Search, ChevronDown, ChevronLeft, ChevronRight,
+  MapPin, BarChart2, MoreHorizontal, Map, Plus, X,
+  Droplets, Scissors, HeartPulse, Filter,
 } from "lucide-react-native";
 import Svg, { Path, Polyline, Rect, Circle as SvgCircle } from "react-native-svg";
 import { useT } from "@context/ThemeContext";
@@ -30,11 +14,12 @@ import { navigateTo } from "@navigation/navigationRef";
 import WebSidebar from "@components/WebSidebar";
 import WebTopBar from "@components/WebTopBar";
 import {
-  ANIMALES_DEMO,
-  STATS_DEMO,
-  type AnimalDemo,
-  type SaludSensor,
+  ANIMALES_DEMO, STATS_DEMO, CENTRO_DEMO, type AnimalDemo, type SaludSensor,
 } from "@/demo/demoData";
+
+const ITEMS_PER_PAGE = 10;
+const SM = 700;
+const MD = 1080;
 
 // ─── CowIcon ──────────────────────────────────────────────────────────────────
 function CowIcon({ size = 20, color = "#4F9E2C" }: { size?: number; color?: string }) {
@@ -51,75 +36,84 @@ function CowIcon({ size = 20, color = "#4F9E2C" }: { size?: number; color?: stri
 // ─── Sparkline ────────────────────────────────────────────────────────────────
 function Sparkline({ color }: { color: string }) {
   return (
-    <Svg width={44} height={18} viewBox="0 0 44 18">
-      <Polyline points="2,15 8,12 16,9 22,7 28,5 36,3 42,2"
-        fill="none" stroke={color} strokeWidth={1.8}
+    <Svg width={80} height={22} viewBox="0 0 80 22">
+      <Polyline points="2,18 14,14 26,11 38,8 50,5 64,3 78,2"
+        fill="none" stroke={color} strokeWidth={2}
         strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
 
-// ─── Signal bars ─────────────────────────────────────────────────────────────
+// ─── Signal bars ──────────────────────────────────────────────────────────────
 function SignalBars({ señal, color }: { señal: string; color: string }) {
   const bars = señal === "Excelente" ? 3 : señal === "Buena" ? 2 : 1;
   return (
-    <Svg width={16} height={14} viewBox="0 0 16 14">
+    <Svg width={18} height={14} viewBox="0 0 18 14">
       <Rect x={0} y={10} width={4} height={4} rx={1} fill={bars >= 1 ? color : "#d1d5db"} />
-      <Rect x={6} y={6} width={4} height={8} rx={1} fill={bars >= 2 ? color : "#d1d5db"} />
-      <Rect x={12} y={2} width={4} height={12} rx={1} fill={bars >= 3 ? color : "#d1d5db"} />
+      <Rect x={7} y={6}  width={4} height={8} rx={1} fill={bars >= 2 ? color : "#d1d5db"} />
+      <Rect x={14} y={2} width={4} height={12} rx={1} fill={bars >= 3 ? color : "#d1d5db"} />
+    </Svg>
+  );
+}
+
+// ─── Battery icon ─────────────────────────────────────────────────────────────
+function BatteryIcon({ pct, color }: { pct: number; color: string }) {
+  const fillW = Math.max(0, Math.round((13 * pct) / 100));
+  return (
+    <Svg width={22} height={12} viewBox="0 0 22 12">
+      <Rect x={0} y={1} width={18} height={10} rx={2} stroke={color} strokeWidth={1.3} fill="none" />
+      <Rect x={18.5} y={4} width={2.5} height={4} rx={1} fill={color} />
+      <Rect x={1.5} y={2.5} width={fillW} height={7} rx={1} fill={color} />
     </Svg>
   );
 }
 
 // ─── Sensor color circle ──────────────────────────────────────────────────────
-function ColorSensorDot({ r, g, b, size = 12 }: { r: number; g: number; b: number; size?: number }) {
+function ColorDot({ r, g, b, size = 10 }: { r: number; g: number; b: number; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <SvgCircle cx={size / 2} cy={size / 2} r={size / 2}
-        fill={`rgb(${r},${g},${b})`} />
+      <SvgCircle cx={size / 2} cy={size / 2} r={size / 2} fill={`rgb(${r},${g},${b})`} />
     </Svg>
   );
 }
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, valor, label, color, bg, sparkline, sparkPct, progressPct, progressColor }: {
+function StatCard({ icon: Icon, valor, label, sub, color, bg, sparkline, progressPct }: {
   icon: React.ComponentType<any>;
-  valor: number | string; label: string; color: string; bg: string;
-  sparkline?: boolean; sparkPct?: string; progressPct?: number; progressColor?: string;
+  valor: number | string; label: string; sub: string;
+  color: string; bg: string; sparkline?: boolean; progressPct?: number;
 }) {
   const T = useT();
   return (
     <View style={[st.statCard, { backgroundColor: T.card, borderColor: T.borde }]}>
-      <View style={st.statCardTop}>
-        <View style={[st.statIconBox, { backgroundColor: bg }]}>
-          <Icon size={20} color={color} />
+      <View style={st.statTop}>
+        <View style={[st.statIcon, { backgroundColor: bg }]}>
+          <Icon size={18} color={color} />
         </View>
-        <Text style={[st.statValor, { color }]}>{valor}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[st.statLabel, { color: T.txtSec }]}>{label}</Text>
+          <Text style={[st.statValor, { color: T.txtMain }]}>{valor}</Text>
+        </View>
       </View>
-      <Text style={[st.statLabel, { color: T.txtSec }]}>{label}</Text>
+      <Text style={[st.statSub, { color }]}>{sub}</Text>
       {sparkline ? (
-        <View style={st.statBottom}>
-          <Sparkline color={color} />
-          {sparkPct && <Text style={[st.statPct, { color }]}>↑ {sparkPct}</Text>}
-        </View>
+        <Sparkline color={color} />
       ) : (
-        <View style={st.statProgressWrap}>
-          <View style={[st.statProgressBg, { backgroundColor: T.borde }]}>
-            <View style={[st.statProgressFill, { width: `${Math.min(progressPct ?? 0, 100)}%` as any, backgroundColor: progressColor ?? color }]} />
-          </View>
+        <View style={[st.progBg, { backgroundColor: T.borde }]}>
+          <View style={[st.progFill, { width: `${Math.min(progressPct ?? 0, 100)}%` as any, backgroundColor: color }]} />
         </View>
       )}
     </View>
   );
 }
 
-// ─── Dropdown pill ────────────────────────────────────────────────────────────
+// ─── Filter pill dropdown ─────────────────────────────────────────────────────
 function FilterPill({ label, T }: { label: string; T: ReturnType<typeof useT> }) {
   return (
-    <View style={[st.filterPill, { backgroundColor: T.card, borderColor: T.borde }]}>
-      <Text style={[st.filterPillTxt, { color: T.txtSec }]}>{label}</Text>
-      <ChevronDown size={14} color={T.txtTer} strokeWidth={1.8} />
-    </View>
+    <TouchableOpacity style={[st.pill, { backgroundColor: T.card, borderColor: T.borde }]} activeOpacity={0.75}>
+      <Text style={[st.pillTxt, { color: T.txtMain }]}>{label}</Text>
+      <ChevronDown size={13} color={T.txtTer} strokeWidth={2} />
+    </TouchableOpacity>
   );
 }
 
@@ -127,49 +121,59 @@ function FilterPill({ label, T }: { label: string; T: ReturnType<typeof useT> })
 function TH({ label, flex, width }: { label: string; flex?: number; width?: number }) {
   const T = useT();
   return (
-    <Text style={[st.thCell, { color: T.txtSec }, flex !== undefined ? { flex } : undefined, width !== undefined ? { width } : undefined]}>
+    <Text style={[
+      st.th, { color: T.txtSec },
+      flex !== undefined && { flex },
+      width !== undefined && { width },
+    ]}>
       {label}
     </Text>
   );
 }
-
-const ITEMS_PER_PAGE = 8;
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 export default function AnimalsScreen() {
   const T = useT();
   const [busqueda, setBusqueda] = useState("");
   const [pagina, setPagina] = useState(1);
+  const [animalesLocales, setAnimalesLocales] = useState<AnimalDemo[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const { width } = useWindowDimensions();
+  const isSm = width < SM;
+  const isMd = width < MD;
 
-  const animales = ANIMALES_DEMO;
+  const todosAnimales = useMemo(
+    () => [...ANIMALES_DEMO, ...animalesLocales],
+    [animalesLocales]
+  );
 
-  const total        = STATS_DEMO.totalAnimales;
-  const dentroCount  = STATS_DEMO.dentroCount;
-  const fueraCount   = STATS_DEMO.fueraCount;
-  const atencionCount = STATS_DEMO.atencionCount;
+  const total        = todosAnimales.length;
+  const dentroCount  = todosAnimales.filter((a) => a.dentroDeCerca).length;
+  const fueraCount   = todosAnimales.filter((a) => !a.dentroDeCerca).length;
+  const atencionCount = todosAnimales.filter((a) => a.salud.sensor !== "verde").length;
 
   const filtrados = useMemo(() => {
-    if (!busqueda) return animales;
+    if (!busqueda) return todosAnimales;
     const q = busqueda.toLowerCase();
-    return animales.filter((a) =>
+    return todosAnimales.filter((a) =>
       `${a.displayNombre} ${a.identificacion} ${a.raza} ${a.potrero}`.toLowerCase().includes(q)
     );
-  }, [animales, busqueda]);
+  }, [busqueda, todosAnimales]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / ITEMS_PER_PAGE));
   const paginaActual = Math.min(pagina, totalPaginas);
-  const paginados = filtrados.slice((paginaActual - 1) * ITEMS_PER_PAGE, paginaActual * ITEMS_PER_PAGE);
+  const paginados    = filtrados.slice((paginaActual - 1) * ITEMS_PER_PAGE, paginaActual * ITEMS_PER_PAGE);
 
-  const registerButton = (
-    <TouchableOpacity style={[st.registerBtn, { backgroundColor: T.verdeOscuro }]} activeOpacity={0.85}>
+  const registerBtn = (
+    <TouchableOpacity
+      style={[st.registerBtn, { backgroundColor: T.verdeOscuro }]}
+      activeOpacity={0.85}
+      onPress={() => setModalVisible(true)}
+    >
       <Plus size={14} color="#fff" strokeWidth={2.5} />
       <Text style={st.registerBtnTxt}>Registrar animal</Text>
     </TouchableOpacity>
   );
-
-  const { width } = useWindowDimensions();
-  const isMd = width < 1100;
-  const isSm = width < 900;
 
   return (
     <View style={[st.root, { backgroundColor: T.fondo }]}>
@@ -178,209 +182,314 @@ export default function AnimalsScreen() {
       <View style={st.main}>
         <WebTopBar
           titulo="Animales"
-          sub="Gestión del rebaño con monitoreo de salud por sensor de calor"
+          sub="Gestiona y registra todos los animales de tu finca"
           alertasCount={fueraCount + STATS_DEMO.alertasCriticas}
-          rightContent={registerButton}
+          rightContent={registerBtn}
         />
 
-        <View style={st.contentRow}>
-          <ScrollView style={st.leftArea} contentContainerStyle={st.leftContent} showsVerticalScrollIndicator={false}>
-
-            {/* Stat cards */}
-            <View style={[st.statCardsRow, isMd && { flexWrap: "wrap" }]}>
-              <StatCard icon={CowIcon}   valor={total}        label="Total animales"    color={T.verde}   bg={T.verdeLuz}  sparkline sparkPct="12% vs. mes" />
-              <StatCard icon={CowIcon}   valor={dentroCount}  label="Dentro de la cerca" color={T.verde}  bg={T.verdeLuz}  progressPct={total > 0 ? (dentroCount / total) * 100 : 85}  progressColor={T.verde} />
-              <StatCard icon={CowIcon}   valor={fueraCount}   label="Fuera de la cerca"  color={T.rojo}   bg={T.rojoBg}    progressPct={total > 0 ? (fueraCount / total) * 100 : 12}   progressColor={T.rojo} />
-              <StatCard icon={HeartPulse} valor={atencionCount} label="Con atención"     color={T.naranja} bg={T.naranjaBg} progressPct={total > 0 ? (atencionCount / total) * 100 : 25} progressColor={T.naranja} />
+        <View style={[st.body, isSm && { flexDirection: "column" }]}>
+          <ScrollView
+            style={st.scroll}
+            contentContainerStyle={[st.scrollContent, isSm && { paddingBottom: 100 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* ── Stat cards ── */}
+            <View style={[st.statsRow, (isSm || isMd) && { flexWrap: "wrap" }]}>
+              <StatCard icon={CowIcon}    valor={total}        label="Total animales"     sub="↑ 12% vs. mes anterior" color={T.verde}   bg={T.verdeLuz}  sparkline />
+              <StatCard icon={CowIcon}    valor={dentroCount}  label="Dentro de la cerca" sub={`${total > 0 ? Math.round(dentroCount/total*100) : 0}% del total`}  color={T.verde}   bg={T.verdeLuz}  progressPct={total > 0 ? (dentroCount/total)*100 : 85} />
+              <StatCard icon={CowIcon}    valor={fueraCount}   label="Fuera de la cerca"  sub={`${total > 0 ? Math.round(fueraCount/total*100) : 0}% del total`}   color={T.rojo}    bg={T.rojoBg}    progressPct={total > 0 ? (fueraCount/total)*100 : 5}  />
+              <StatCard icon={HeartPulse} valor={atencionCount} label="Con atención"       sub={`${total > 0 ? Math.round(atencionCount/total*100) : 0}% del total`} color={T.naranja} bg={T.naranjaBg} progressPct={total > 0 ? (atencionCount/total)*100 : 25} />
             </View>
 
-            {/* Toolbar */}
-            <View style={[st.toolbarRow, isMd && { flexWrap: "wrap", rowGap: 8 }]}>
-              <View style={[st.searchWrap, { backgroundColor: T.card, borderColor: T.borde }]}>
+            {/* ── Toolbar ── */}
+            <View style={[st.toolbar, isSm && { flexWrap: "wrap" }]}>
+              <View style={[st.searchBox, { backgroundColor: T.card, borderColor: T.borde }, isSm && { flex: 1, width: "100%" as any }]}>
                 <Search size={14} color={T.txtTer} strokeWidth={1.8} />
-                <TextInput value={busqueda} onChangeText={(t) => { setBusqueda(t); setPagina(1); }}
-                  placeholder="Buscar animal..." placeholderTextColor={T.txtTer}
-                  style={[st.searchInput, { color: T.txtMain }]} />
+                <TextInput
+                  value={busqueda}
+                  onChangeText={(t) => { setBusqueda(t); setPagina(1); }}
+                  placeholder="Buscar animal..."
+                  placeholderTextColor={T.txtTer}
+                  style={[st.searchInput, { color: T.txtMain }]}
+                />
               </View>
-              <FilterPill label="Estado: Todos" T={T} />
-              <FilterPill label="Categoría: Todas" T={T} />
-              {!isMd && <FilterPill label="Sensor calor: Todos" T={T} />}
+              {!isSm && <FilterPill label="Estado: Todos" T={T} />}
+              {!isSm && <FilterPill label="Categoría: Todas" T={T} />}
+              {!isSm && <FilterPill label="Potrero: Todos" T={T} />}
               <View style={{ flex: 1 }} />
-              <TouchableOpacity style={[st.iconBtn, { backgroundColor: T.card, borderColor: T.borde }]} activeOpacity={0.75}>
-                <SlidersHorizontal size={16} color={T.txtMain} strokeWidth={1.8} />
+              <TouchableOpacity style={[st.moreFiltersBtn, { backgroundColor: T.card, borderColor: T.borde }]} activeOpacity={0.75}>
+                <Filter size={14} color={T.txtMain} strokeWidth={1.8} />
+                {!isSm && <Text style={[st.moreFiltersTxt, { color: T.txtMain }]}>Más filtros</Text>}
               </TouchableOpacity>
             </View>
 
-            {/* Table */}
-            <ScrollView horizontal={isSm} showsHorizontalScrollIndicator={isSm}>
-              <View style={[st.table, isSm && { minWidth: 900 }, { backgroundColor: T.card, borderColor: T.borde }]}>
-                <View style={[st.tableHeader, { backgroundColor: T.cardElevada, borderBottomColor: T.borde }]}>
-                  <TH label="ANIMAL"          flex={2} />
-                  <TH label="ESTADO"          width={90} />
-                  <TH label="SENSOR CALOR"    width={120} />
-                  <TH label="COLLAR / ESTADO" flex={1} />
-                  <TH label="BATERÍA"         width={85} />
-                  <TH label="SEÑAL"           width={75} />
-                  <TH label="POTRERO"         flex={1} />
-                  <TH label="ACCIONES"        width={80} />
-                </View>
-
+            {/* ── Table / Cards ── */}
+            {isSm ? (
+              <View style={st.cardList}>
                 {paginados.length === 0 ? (
-                  <View style={[st.emptyRow, { borderColor: T.borde }]}>
+                  <View style={[st.emptyBox, { borderColor: T.borde, backgroundColor: T.card }]}>
                     <CowIcon size={32} color={T.txtTer} />
                     <Text style={[st.emptyTxt, { color: T.txtSec }]}>No se encontraron animales.</Text>
                   </View>
-                ) : (
-                  paginados.map((animal, idx) => (
-                    <AnimalTableRow key={animal.id} animal={animal} isLast={idx === paginados.length - 1} T={T} />
-                  ))
-                )}
-
-                <TablePagination
-                  pagina={paginaActual} totalPaginas={totalPaginas}
-                  totalItems={filtrados.length} itemsPerPage={ITEMS_PER_PAGE}
-                  onCambiar={setPagina} T={T}
-                />
+                ) : paginados.map((a) => (
+                  <AnimalCard key={a.id} animal={a} T={T} />
+                ))}
               </View>
-            </ScrollView>
+            ) : (
+              <ScrollView horizontal={false} showsHorizontalScrollIndicator={false}>
+                <View style={[st.table, { backgroundColor: T.card, borderColor: T.borde }]}>
+                  {/* Header */}
+                  <View style={[st.thead, { backgroundColor: T.cardElevada, borderBottomColor: T.borde }]}>
+                    <TH label="ANIMAL"               flex={2.2} />
+                    <TH label="ESTADO"               width={100} />
+                    <TH label="POTRERO"              width={130} />
+                    <TH label="COLLAR / DISPOSITIVO" flex={1.2} />
+                    <TH label="BATERÍA"              width={90} />
+                    <TH label="SEÑAL"                width={70} />
+                    <TH label="ÚLTIMA UBICACIÓN"     flex={1.3} />
+                    <TH label="ACCIONES"             width={82} />
+                  </View>
+
+                  {paginados.length === 0 ? (
+                    <View style={[st.emptyBox, { borderBottomWidth: 0 }]}>
+                      <CowIcon size={32} color={T.txtTer} />
+                      <Text style={[st.emptyTxt, { color: T.txtSec }]}>No se encontraron animales.</Text>
+                    </View>
+                  ) : paginados.map((a, i) => (
+                    <AnimalRow key={a.id} animal={a} isLast={i === paginados.length - 1} T={T} />
+                  ))}
+
+                  <TablePagination
+                    pagina={paginaActual} totalPaginas={totalPaginas}
+                    totalItems={filtrados.length} itemsPerPage={ITEMS_PER_PAGE}
+                    onCambiar={setPagina} T={T}
+                  />
+                </View>
+              </ScrollView>
+            )}
+
+            {/* Mobile pagination */}
+            {isSm && (
+              <TablePagination
+                pagina={paginaActual} totalPaginas={totalPaginas}
+                totalItems={filtrados.length} itemsPerPage={ITEMS_PER_PAGE}
+                onCambiar={setPagina} T={T}
+              />
+            )}
           </ScrollView>
 
-          {!isSm && <RightFiltersPanel T={T} animales={animales} />}
+          {!isSm && <RightPanel T={T} animales={todosAnimales} />}
         </View>
       </View>
+
+      <AddAnimalModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onRegistrar={(animal) => {
+          setAnimalesLocales((prev) => [...prev, animal]);
+          setModalVisible(false);
+        }}
+        T={T}
+      />
     </View>
   );
 }
 
-// ─── Animal table row ─────────────────────────────────────────────────────────
-function AnimalTableRow({ animal, isLast, T }: { animal: AnimalDemo; isLast: boolean; T: ReturnType<typeof useT> }) {
+// ─── Desktop table row ────────────────────────────────────────────────────────
+function AnimalRow({ animal, isLast, T }: { animal: AnimalDemo; isLast: boolean; T: ReturnType<typeof useT> }) {
   const dentroColor = animal.dentroDeCerca ? T.verde : T.rojo;
   const dentroBg    = animal.dentroDeCerca ? T.verdeAlfa : T.rojoBg;
-  const bateria     = animal.bateria;
-  const bateriaColor = bateria >= 60 ? T.verde : bateria >= 30 ? T.naranja : T.rojo;
-  const señalColor   = animal.señal === "Excelente" ? T.verde : animal.señal === "Buena" ? T.naranja : T.rojo;
+  const batColor    = animal.bateria >= 60 ? T.verde : animal.bateria >= 30 ? T.naranja : T.rojo;
+  const señalColor  = animal.señal === "Excelente" ? T.verde : animal.señal === "Buena" ? T.naranja : T.rojo;
 
-  const saludColor: Record<SaludSensor, string> = {
-    verde:   T.verde,
-    amarillo: T.naranja,
-    rojo:    T.rojo,
-  };
-  const saludBg: Record<SaludSensor, string> = {
-    verde:   T.verdeAlfa,
-    amarillo: T.naranjaBg,
-    rojo:    T.rojoBg,
-  };
-
-  // Collar state badge
+  const hasCollarIssue = animal.estadoCollar === "cortado" || animal.estadoCollar === "retirado";
   const collarBadge = {
-    en_linea:    { label: "En línea",     color: T.verde,    bg: T.verdeAlfa },
-    bateria_baja:{ label: "Bat. baja",    color: T.naranja,  bg: T.naranjaBg },
-    cortado:     { label: "Cortado",      color: T.rojo,     bg: T.rojoBg    },
-    retirado:    { label: "Retirado",     color: T.rojo,     bg: T.rojoBg    },
-    sin_señal:   { label: "Sin señal",    color: T.azul,     bg: T.azulBg    },
+    en_linea:     { label: "En línea",  color: T.verde,   bg: T.verdeAlfa },
+    bateria_baja: { label: "Bat. baja", color: T.naranja, bg: T.naranjaBg },
+    cortado:      { label: "Cortado",   color: T.rojo,    bg: T.rojoBg    },
+    retirado:     { label: "Retirado",  color: T.rojo,    bg: T.rojoBg    },
+    sin_señal:    { label: "Sin señal", color: T.azul,    bg: T.azulBg    },
   }[animal.estadoCollar];
 
+  const saludColor: Record<SaludSensor, string> = { verde: T.verde, amarillo: T.naranja, rojo: T.rojo };
   const initials = animal.displayNombre.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-  const avatarBg  = animal.categoria === "Toro" ? T.naranjaBg : T.verdeLuz;
+  const avatarBg = animal.categoria === "Toro" ? T.naranjaBg : T.verdeLuz;
 
-  // Icon for special collar states
-  const hasCollarIssue = animal.estadoCollar === "cortado" || animal.estadoCollar === "retirado";
+  const lat = animal.ubicacion.lat.toFixed(5);
+  const lng = animal.ubicacion.lng.toFixed(5);
 
   return (
     <TouchableOpacity
-      style={[st.tableRow, { backgroundColor: T.card, borderBottomColor: T.borde }, isLast && { borderBottomWidth: 0 }]}
-      activeOpacity={0.75}
+      style={[st.row, { backgroundColor: T.card, borderBottomColor: T.borde }, isLast && { borderBottomWidth: 0 }]}
+      activeOpacity={0.7}
     >
       {/* Animal */}
-      <View style={[st.tdAnimal, { flex: 2 }]}>
-        <View style={[st.rowAvatar, { backgroundColor: avatarBg }]}>
-          <Text style={[st.rowAvatarTxt, { color: T.verdeOscuro }]}>{initials}</Text>
+      <View style={[st.cellAnimal, { flex: 2.2 }]}>
+        <View style={[st.avatar, { backgroundColor: avatarBg }]}>
+          <Text style={[st.avatarTxt, { color: T.verdeOscuro }]}>{initials}</Text>
         </View>
-        <View style={st.rowAnimalInfo}>
-          <Text style={[st.rowName, { color: T.txtMain }]}>{animal.displayNombre}</Text>
-          <Text style={[st.rowId, { color: T.txtSec }]}>{animal.identificacion} · {animal.genero}</Text>
-          <View style={st.rowChips}>
-            <View style={[st.rowChip, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
-              <Text style={[st.rowChipTxt, { color: T.txtSec }]}>{animal.categoria}</Text>
+        <View style={st.animalInfo}>
+          <Text style={[st.animalName, { color: T.txtMain }]}>{animal.displayNombre}</Text>
+          <Text style={[st.animalSub, { color: T.txtSec }]}>{animal.identificacion} · {animal.genero}</Text>
+          <View style={st.chips}>
+            <View style={[st.chip, { backgroundColor: animal.categoria === "Toro" ? T.naranjaBg : T.verdeLuz, borderColor: T.borde }]}>
+              <Text style={[st.chipTxt, { color: animal.categoria === "Toro" ? T.naranja : T.verde }]}>{animal.categoria}</Text>
             </View>
-            <View style={[st.rowChip, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
-              <Text style={[st.rowChipTxt, { color: T.txtSec }]}>{animal.edad}</Text>
+            <View style={[st.chip, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+              <Text style={[st.chipTxt, { color: T.txtSec }]}>{animal.edad}</Text>
             </View>
           </View>
         </View>
       </View>
 
-      {/* Estado cerca */}
-      <View style={{ width: 90, alignItems: "flex-start" }}>
-        <View style={[st.estadoBadge, { backgroundColor: dentroBg }]}>
-          <Text style={[st.estadoBadgeTxt, { color: dentroColor }]}>
-            {animal.dentroDeCerca ? "Dentro" : "Fuera"}
-          </Text>
+      {/* Estado */}
+      <View style={{ width: 100 }}>
+        <View style={[st.badge, { backgroundColor: dentroBg }]}>
+          <Text style={[st.badgeTxt, { color: dentroColor }]}>{animal.dentroDeCerca ? "Dentro" : "Fuera"}</Text>
         </View>
+        <Text style={[st.subTxt, { color: T.txtTer, marginTop: 4 }]}>{animal.ultimaVez}</Text>
       </View>
 
-      {/* Salud sensor de calor */}
-      <View style={{ width: 120 }}>
-        <View style={[st.saludRow, { backgroundColor: saludBg[animal.salud.sensor] }]}>
-          <ColorSensorDot r={animal.salud.r} g={animal.salud.g} b={animal.salud.b} size={10} />
-          <Droplets size={11} color={saludColor[animal.salud.sensor]} strokeWidth={2} />
-          <Text style={[st.saludLabel, { color: saludColor[animal.salud.sensor] }]}>
-            {animal.salud.label}
-          </Text>
-        </View>
-        <Text style={[st.saludRgb, { color: T.txtTer }]}>
-          RGB {animal.salud.r},{animal.salud.g},{animal.salud.b}
-        </Text>
+      {/* Potrero */}
+      <View style={[st.cellRow, { width: 130 }]}>
+        <MapPin size={11} color={T.txtTer} strokeWidth={1.8} />
+        <Text style={[st.cellTxt, { color: T.txtMain }]} numberOfLines={1}>{animal.potrero}</Text>
       </View>
 
-      {/* Collar / estado */}
-      <View style={{ flex: 1 }}>
+      {/* Collar */}
+      <View style={{ flex: 1.2 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-          {hasCollarIssue && <Scissors size={11} color={T.rojo} strokeWidth={2} />}
-          <Text style={[st.tdTxt, { color: T.txtMain }]}>{animal.collarId}</Text>
+          {hasCollarIssue && <Scissors size={10} color={T.rojo} strokeWidth={2} />}
+          <Text style={[st.cellTxtBold, { color: T.txtMain }]}>{animal.collarId}</Text>
         </View>
-        <View style={[st.collarBadge, { backgroundColor: collarBadge.bg }]}>
-          <Text style={[st.collarBadgeTxt, { color: collarBadge.color }]}>{collarBadge.label}</Text>
+        <Text style={[st.subTxt, { color: T.txtSec }]}>LoRa</Text>
+        <View style={[st.badge, { backgroundColor: collarBadge.bg, marginTop: 3 }]}>
+          <Text style={[st.badgeTxt, { color: collarBadge.color }]}>{collarBadge.label}</Text>
         </View>
       </View>
 
       {/* Batería */}
-      <View style={{ width: 85 }}>
-        <View style={[st.batBarBg, { backgroundColor: T.cardElevada }]}>
-          <View style={[st.batBarFill, { width: `${bateria}%` as any, backgroundColor: bateriaColor }]} />
+      <View style={{ width: 90 }}>
+        <View style={st.cellRow}>
+          <Text style={[st.cellTxtBold, { color: batColor }]}>{animal.bateria}%</Text>
+          <BatteryIcon pct={animal.bateria} color={batColor} />
         </View>
-        <Text style={[st.tdTxt, { color: T.txtMain, marginTop: 3 }]}>{bateria}%</Text>
+        <View style={[st.batBg, { backgroundColor: T.cardElevada }]}>
+          <View style={[st.batFill, { width: `${animal.bateria}%` as any, backgroundColor: batColor }]} />
+        </View>
       </View>
 
       {/* Señal */}
-      <View style={{ width: 75, alignItems: "flex-start", gap: 3 }}>
+      <View style={[st.cellCenter, { width: 70 }]}>
         <SignalBars señal={animal.señal} color={señalColor} />
-        <Text style={[st.tdSubTxt, { color: T.txtSec }]}>{animal.señal}</Text>
+        <Text style={[st.subTxt, { color: T.txtSec, marginTop: 2 }]}>{animal.señal}</Text>
       </View>
 
-      {/* Potrero */}
-      <View style={[st.tdRow, { flex: 1 }]}>
-        <MapPin size={11} color={T.txtTer} strokeWidth={1.8} />
-        <Text style={[st.tdTxt, { color: T.txtMain }]} numberOfLines={1}>{animal.potrero}</Text>
+      {/* Última ubicación */}
+      <View style={{ flex: 1.3 }}>
+        <View style={[st.cellRow, { gap: 4 }]}>
+          <ColorDot r={animal.salud.r} g={animal.salud.g} b={animal.salud.b} size={8} />
+          <Text style={[st.subTxt, { color: T.txtSec }]}>{animal.ultimaVez}</Text>
+        </View>
+        <Text style={[st.coordTxt, { color: T.txtTer }]}>Lat {lat}</Text>
+        <Text style={[st.coordTxt, { color: T.txtTer }]}>Lng {lng}</Text>
       </View>
 
       {/* Acciones */}
-      <View style={[st.actionsCell, { width: 80 }]}>
+      <View style={[st.actions, { width: 82 }]}>
         <TouchableOpacity style={[st.actionBtn, { backgroundColor: T.cardElevada }]} activeOpacity={0.75} onPress={() => navigateTo("Map")}>
-          <MapPin size={13} color={T.txtSec} strokeWidth={1.8} />
+          <MapPin size={12} color={T.txtSec} strokeWidth={1.8} />
         </TouchableOpacity>
         <TouchableOpacity style={[st.actionBtn, { backgroundColor: T.cardElevada }]} activeOpacity={0.75}>
-          <BarChart2 size={13} color={T.txtSec} strokeWidth={1.8} />
+          <BarChart2 size={12} color={T.txtSec} strokeWidth={1.8} />
         </TouchableOpacity>
         <TouchableOpacity style={[st.actionBtn, { backgroundColor: T.cardElevada }]} activeOpacity={0.75}>
-          <MoreHorizontal size={13} color={T.txtSec} strokeWidth={1.8} />
+          <MoreHorizontal size={12} color={T.txtSec} strokeWidth={1.8} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 }
 
-// ─── Table pagination ─────────────────────────────────────────────────────────
+// ─── Mobile card ──────────────────────────────────────────────────────────────
+function AnimalCard({ animal, T }: { animal: AnimalDemo; T: ReturnType<typeof useT> }) {
+  const dentroColor = animal.dentroDeCerca ? T.verde : T.rojo;
+  const dentroBg    = animal.dentroDeCerca ? T.verdeAlfa : T.rojoBg;
+  const batColor    = animal.bateria >= 60 ? T.verde : animal.bateria >= 30 ? T.naranja : T.rojo;
+  const señalColor  = animal.señal === "Excelente" ? T.verde : animal.señal === "Buena" ? T.naranja : T.rojo;
+  const initials    = animal.displayNombre.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const avatarBg    = animal.categoria === "Toro" ? T.naranjaBg : T.verdeLuz;
+
+  return (
+    <TouchableOpacity style={[st.mCard, { backgroundColor: T.card, borderColor: T.borde }]} activeOpacity={0.75}>
+      {/* Top row */}
+      <View style={st.mCardTop}>
+        <View style={[st.avatar, { backgroundColor: avatarBg }]}>
+          <Text style={[st.avatarTxt, { color: T.verdeOscuro }]}>{initials}</Text>
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[st.animalName, { color: T.txtMain }]}>{animal.displayNombre}</Text>
+          <Text style={[st.animalSub, { color: T.txtSec }]}>{animal.identificacion} · {animal.raza}</Text>
+          <View style={st.chips}>
+            <View style={[st.chip, { backgroundColor: animal.categoria === "Toro" ? T.naranjaBg : T.verdeLuz, borderColor: T.borde }]}>
+              <Text style={[st.chipTxt, { color: animal.categoria === "Toro" ? T.naranja : T.verde }]}>{animal.categoria}</Text>
+            </View>
+            <View style={[st.chip, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+              <Text style={[st.chipTxt, { color: T.txtSec }]}>{animal.edad}</Text>
+            </View>
+          </View>
+        </View>
+        <View style={[st.badge, { backgroundColor: dentroBg }]}>
+          <Text style={[st.badgeTxt, { color: dentroColor }]}>{animal.dentroDeCerca ? "Dentro" : "Fuera"}</Text>
+        </View>
+      </View>
+
+      {/* Divider */}
+      <View style={[st.mDivider, { backgroundColor: T.borde }]} />
+
+      {/* Bottom row */}
+      <View style={st.mCardBottom}>
+        <View style={st.mStat}>
+          <Text style={[st.mStatLabel, { color: T.txtTer }]}>Collar</Text>
+          <Text style={[st.mStatVal, { color: T.txtMain }]}>{animal.collarId}</Text>
+        </View>
+        <View style={st.mStat}>
+          <Text style={[st.mStatLabel, { color: T.txtTer }]}>Potrero</Text>
+          <Text style={[st.mStatVal, { color: T.txtMain }]}>{animal.potrero.replace("Potrero ", "")}</Text>
+        </View>
+        <View style={st.mStat}>
+          <Text style={[st.mStatLabel, { color: T.txtTer }]}>Batería</Text>
+          <View style={st.cellRow}>
+            <Text style={[st.mStatVal, { color: batColor }]}>{animal.bateria}%</Text>
+            <BatteryIcon pct={animal.bateria} color={batColor} />
+          </View>
+        </View>
+        <View style={st.mStat}>
+          <Text style={[st.mStatLabel, { color: T.txtTer }]}>Señal</Text>
+          <SignalBars señal={animal.señal} color={señalColor} />
+        </View>
+      </View>
+
+      {/* Actions */}
+      <View style={st.mActions}>
+        <TouchableOpacity style={[st.mActionBtn, { backgroundColor: T.cardElevada, borderColor: T.borde }]} activeOpacity={0.75} onPress={() => navigateTo("Map")}>
+          <MapPin size={13} color={T.txtSec} strokeWidth={1.8} />
+          <Text style={[st.mActionTxt, { color: T.txtSec }]}>Ver mapa</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[st.mActionBtn, { backgroundColor: T.cardElevada, borderColor: T.borde }]} activeOpacity={0.75}>
+          <BarChart2 size={13} color={T.txtSec} strokeWidth={1.8} />
+          <Text style={[st.mActionTxt, { color: T.txtSec }]}>Historial</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[st.mActionBtn, { backgroundColor: T.cardElevada, borderColor: T.borde }]} activeOpacity={0.75}>
+          <MoreHorizontal size={13} color={T.txtSec} strokeWidth={1.8} />
+          <Text style={[st.mActionTxt, { color: T.txtSec }]}>Más</Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
 function TablePagination({ pagina, totalPaginas, totalItems, itemsPerPage, onCambiar, T }: {
   pagina: number; totalPaginas: number; totalItems: number; itemsPerPage: number;
   onCambiar: (p: number) => void; T: ReturnType<typeof useT>;
@@ -389,198 +498,400 @@ function TablePagination({ pagina, totalPaginas, totalItems, itemsPerPage, onCam
   const to    = Math.min(pagina * itemsPerPage, totalItems);
   const pages = Array.from({ length: Math.min(totalPaginas, 5) }, (_, i) => i + 1);
   return (
-    <View style={[st.paginationRow, { borderTopColor: T.borde }]}>
-      <Text style={[st.paginationInfo, { color: T.txtSec }]}>
+    <View style={[st.pagination, { borderTopColor: T.borde }]}>
+      <Text style={[st.paginInfo, { color: T.txtSec }]}>
         Mostrando {from} a {to} de {totalItems} animales
       </Text>
-      <View style={st.paginationBtns}>
-        <TouchableOpacity style={[st.pageBtn, { backgroundColor: T.card, borderColor: T.borde }, pagina === 1 && { opacity: 0.4 }]}
+      <View style={st.paginBtns}>
+        <TouchableOpacity
+          style={[st.pBtn, { backgroundColor: T.card, borderColor: T.borde }, pagina === 1 && { opacity: 0.4 }]}
           onPress={() => pagina > 1 && onCambiar(pagina - 1)} disabled={pagina === 1} activeOpacity={0.75}>
-          <ChevronLeft size={14} color={T.txtMain} strokeWidth={2} />
+          <ChevronLeft size={13} color={T.txtMain} strokeWidth={2} />
         </TouchableOpacity>
         {pages.map((p) => (
           <TouchableOpacity key={p}
-            style={[st.pageBtn, pagina === p ? { backgroundColor: T.verdeOscuro, borderColor: T.verdeOscuro } : { backgroundColor: T.card, borderColor: T.borde }]}
+            style={[st.pBtn, pagina === p ? { backgroundColor: T.verdeOscuro, borderColor: T.verdeOscuro } : { backgroundColor: T.card, borderColor: T.borde }]}
             onPress={() => onCambiar(p)} activeOpacity={0.75}>
-            <Text style={[st.pageBtnTxt, { color: pagina === p ? "#fff" : T.txtMain }]}>{p}</Text>
+            <Text style={[st.pBtnTxt, { color: pagina === p ? "#fff" : T.txtMain }]}>{p}</Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity style={[st.pageBtn, { backgroundColor: T.card, borderColor: T.borde }, pagina === totalPaginas && { opacity: 0.4 }]}
+        <TouchableOpacity
+          style={[st.pBtn, { backgroundColor: T.card, borderColor: T.borde }, pagina === totalPaginas && { opacity: 0.4 }]}
           onPress={() => pagina < totalPaginas && onCambiar(pagina + 1)} disabled={pagina === totalPaginas} activeOpacity={0.75}>
-          <ChevronRight size={14} color={T.txtMain} strokeWidth={2} />
+          <ChevronRight size={13} color={T.txtMain} strokeWidth={2} />
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-// ─── Right filters panel ──────────────────────────────────────────────────────
-function RightFiltersPanel({ T, animales }: { T: ReturnType<typeof useT>; animales: AnimalDemo[] }) {
-  const potreroSummary = [
-    { name: "Potrero Norte", count: animales.filter((a) => a.potrero === "Potrero Norte").length },
-    { name: "Potrero Sur",   count: animales.filter((a) => a.potrero === "Potrero Sur").length   },
-    { name: "Potrero Este",  count: animales.filter((a) => a.potrero === "Potrero Este").length  },
-    { name: "Potrero Oeste", count: animales.filter((a) => a.potrero === "Potrero Oeste").length },
+// ─── Right panel ──────────────────────────────────────────────────────────────
+function RightPanel({ T, animales }: { T: ReturnType<typeof useT>; animales: AnimalDemo[] }) {
+  const potreros = [
+    { name: "Potrero Norte", count: animales.filter((a) => a.potrero === "Potrero Norte").length, color: T.verde   },
+    { name: "Potrero Sur",   count: animales.filter((a) => a.potrero === "Potrero Sur").length,   color: T.rojo    },
+    { name: "Potrero Este",  count: animales.filter((a) => a.potrero === "Potrero Este").length,  color: T.verde   },
+    { name: "Potrero Oeste", count: animales.filter((a) => a.potrero === "Potrero Oeste").length, color: T.naranja },
   ];
-  const dotColors = [T.verde, T.rojo, T.verde, T.naranja];
 
-  // Salud resumen
-  const saludSummary = [
-    { label: "Excelente", count: animales.filter((a) => a.salud.sensor === "verde").length,    color: T.verde   },
-    { label: "Atención",  count: animales.filter((a) => a.salud.sensor === "amarillo").length, color: T.naranja },
-    { label: "Crítico",   count: animales.filter((a) => a.salud.sensor === "rojo").length,     color: T.rojo    },
+  const filters = [
+    { label: "Estado",        value: "Todos"  },
+    { label: "Categoría",     value: "Todas"  },
+    { label: "Potrero",       value: "Todos"  },
+    { label: "Rango de edad", value: "Todos"  },
+    { label: "Género",        value: "Todos"  },
+    { label: "Estado de salud", value: "Todos" },
   ];
 
   return (
     <View style={[st.rightPanel, { backgroundColor: T.card, borderLeftColor: T.borde }]}>
-      <View style={st.rightPanelHeader}>
-        <Text style={[st.rightPanelTitle, { color: T.txtMain }]}>Filtros</Text>
-        <TouchableOpacity activeOpacity={0.75}>
-          <Text style={[st.limpiarTxt, { color: T.verde }]}>Limpiar todo</Text>
-        </TouchableOpacity>
-      </View>
-
-      {[
-        { label: "ESTADO",         value: "Todos" },
-        { label: "CATEGORÍA",      value: "Todas" },
-        { label: "POTRERO",        value: "Todos" },
-        { label: "ESTADO COLLAR",  value: "Todos" },
-      ].map((f) => (
-        <View key={f.label} style={st.filterSection}>
-          <Text style={[st.filterSectionLabel, { color: T.txtSec }]}>{f.label}</Text>
-          <View style={[st.filterDropdown, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
-            <Text style={[st.filterDropdownTxt, { color: T.txtMain }]}>{f.value}</Text>
-            <ChevronDown size={14} color={T.txtTer} strokeWidth={1.8} />
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={st.rpHeader}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Filter size={14} color={T.txtMain} strokeWidth={2} />
+            <Text style={[st.rpTitle, { color: T.txtMain }]}>Filtros</Text>
           </View>
+          <TouchableOpacity activeOpacity={0.75}>
+            <Text style={[st.rpClear, { color: T.verde }]}>Limpiar todo</Text>
+          </TouchableOpacity>
         </View>
-      ))}
 
-      <TouchableOpacity style={[st.applyBtn, { backgroundColor: T.verdeOscuro }]} activeOpacity={0.85}>
-        <Text style={st.applyBtnTxt}>Aplicar filtros</Text>
-      </TouchableOpacity>
+        {filters.map((f) => (
+          <View key={f.label} style={st.rpFilter}>
+            <Text style={[st.rpFilterLabel, { color: T.txtSec }]}>{f.label}</Text>
+            <TouchableOpacity style={[st.rpDropdown, { backgroundColor: T.cardElevada, borderColor: T.borde }]} activeOpacity={0.75}>
+              <Text style={[st.rpDropdownTxt, { color: T.txtMain }]}>{f.value}</Text>
+              <ChevronDown size={13} color={T.txtTer} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+        ))}
 
-      <View style={[st.divider, { backgroundColor: T.borde }]} />
+        <TouchableOpacity style={[st.applyBtn, { backgroundColor: T.verdeOscuro }]} activeOpacity={0.85}>
+          <Text style={st.applyBtnTxt}>Aplicar filtros</Text>
+        </TouchableOpacity>
 
-      {/* Salud por sensor */}
-      <Text style={[st.summaryTitle, { color: T.txtMain }]}>Salud sensor de calor</Text>
-      {saludSummary.map((s) => (
-        <View key={s.label} style={st.potreroRow}>
-          <Droplets size={12} color={s.color} strokeWidth={2} />
-          <Text style={[st.potreroName, { color: T.txtMain }]}>{s.label}</Text>
-          <Text style={[st.potreroCount, { color: T.txtSec }]}>{s.count}</Text>
-        </View>
-      ))}
+        <View style={[st.rpDivider, { backgroundColor: T.borde }]} />
 
-      <View style={[st.divider, { backgroundColor: T.borde, marginVertical: 12 }]} />
+        <Text style={[st.rpSectionTitle, { color: T.txtMain }]}>Resumen por potrero</Text>
+        {potreros.map((p) => (
+          <View key={p.name} style={st.rpPotreroRow}>
+            <View style={[st.rpDot, { backgroundColor: p.color }]} />
+            <Text style={[st.rpPotreroName, { color: T.txtMain }]}>{p.name}</Text>
+            <Text style={[st.rpPotreroCount, { color: T.txtSec }]}>{p.count}</Text>
+          </View>
+        ))}
 
-      {/* Potrero summary */}
-      <Text style={[st.summaryTitle, { color: T.txtMain }]}>Resumen por potrero</Text>
-      {potreroSummary.map((p, i) => (
-        <View key={p.name} style={st.potreroRow}>
-          <View style={[st.potreroDot, { backgroundColor: dotColors[i] }]} />
-          <Text style={[st.potreroName, { color: T.txtMain }]}>{p.name}</Text>
-          <Text style={[st.potreroCount, { color: T.txtSec }]}>{p.count}</Text>
-        </View>
-      ))}
-
-      <TouchableOpacity style={st.verMapaLink} activeOpacity={0.75} onPress={() => navigateTo("Map")}>
-        <Map size={13} color={T.verde} strokeWidth={1.8} />
-        <Text style={[st.verMapaTxt, { color: T.verde }]}>Ver mapa de potreros</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={st.mapLink} activeOpacity={0.75} onPress={() => navigateTo("Map")}>
+          <Map size={13} color={T.verde} strokeWidth={1.8} />
+          <Text style={[st.mapLinkTxt, { color: T.verde }]}>Ver mapa de potreros</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 }
 
+// ─── Add animal modal ─────────────────────────────────────────────────────────
+function AddAnimalModal({ visible, onClose, onRegistrar, T }: {
+  visible: boolean;
+  onClose: () => void;
+  onRegistrar: (animal: AnimalDemo) => void;
+  T: ReturnType<typeof useT>;
+}) {
+  const [nombre,    setNombre]    = useState("");
+  const [collar,    setCollar]    = useState("");
+  const [categoria, setCategoria] = useState<"Vaca" | "Toro" | "Ternero">("Vaca");
+  const [potrero,   setPotrero]   = useState("Potrero Norte");
+  const [errNombre, setErrNombre] = useState(false);
+  const [errCollar, setErrCollar] = useState(false);
+
+  function reset() {
+    setNombre(""); setCollar(""); setCategoria("Vaca"); setPotrero("Potrero Norte");
+    setErrNombre(false); setErrCollar(false);
+  }
+
+  function handleClose() { reset(); onClose(); }
+
+  function handleRegistrar() {
+    const okNombre = nombre.trim().length > 0;
+    const okCollar = collar.trim().length > 0;
+    setErrNombre(!okNombre);
+    setErrCollar(!okCollar);
+    if (!okNombre || !okCollar) return;
+
+    const prefijo = categoria === "Toro" ? "TOR" : categoria === "Ternero" ? "TER" : "VAC";
+    const num = String(Math.floor(Math.random() * 900) + 100);
+    onRegistrar({
+      id: `local-${Date.now()}`,
+      nombre: nombre.trim(),
+      displayNombre: nombre.trim(),
+      identificacion: `${prefijo}-${num}`,
+      categoria,
+      raza: "Sin especificar",
+      edad: "Sin dato",
+      genero: categoria === "Toro" ? "♂" : "♀",
+      potrero,
+      estado: "dentro",
+      estadoCollar: "en_linea",
+      salud: { sensor: "verde", label: "Excelente", descripcion: "Animal recién registrado.", r: 180, g: 220, b: 170 },
+      bateria: 100,
+      señal: "Buena",
+      collarId: collar.trim(),
+      ubicacion: {
+        lat: CENTRO_DEMO.lat + (Math.random() - 0.5) * 0.003,
+        lng: CENTRO_DEMO.lng + (Math.random() - 0.5) * 0.003,
+      },
+      dentroDeCerca: true,
+      ultimaVez: "Ahora",
+      peso: 0,
+    });
+    reset();
+  }
+
+  const CATEGORIAS: Array<"Vaca" | "Toro" | "Ternero"> = ["Vaca", "Toro", "Ternero"];
+  const POTREROS = ["Potrero Norte", "Potrero Sur", "Potrero Este", "Potrero Oeste"];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+      <View style={mo.backdrop}>
+        <View style={[mo.dialog, { backgroundColor: T.card, borderColor: T.borde }]}>
+
+          {/* Header */}
+          <View style={mo.header}>
+            <View style={[mo.headerIcon, { backgroundColor: T.verdeLuz }]}>
+              <Plus size={18} color={T.verde} strokeWidth={2.5} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[mo.title, { color: T.txtMain }]}>Registrar animal</Text>
+              <Text style={[mo.sub, { color: T.txtSec }]}>Agrega un nuevo animal al registro</Text>
+            </View>
+            <TouchableOpacity style={[mo.closeBtn, { backgroundColor: T.cardElevada }]} onPress={handleClose} activeOpacity={0.75}>
+              <X size={16} color={T.txtSec} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={[mo.divider, { backgroundColor: T.borde }]} />
+
+          {/* Nombre */}
+          <View style={mo.field}>
+            <Text style={[mo.label, { color: T.txtSec }]}>Nombre del animal *</Text>
+            <View style={[mo.inputBox, { borderColor: errNombre ? T.rojo : T.borde, backgroundColor: T.fondo }]}>
+              <TextInput
+                value={nombre}
+                onChangeText={(t) => { setNombre(t); if (t.trim()) setErrNombre(false); }}
+                placeholder="Ej: Luna, Estrella, Trueno..."
+                placeholderTextColor={T.txtTer}
+                style={[mo.inputText, { color: T.txtMain }] as any}
+              />
+            </View>
+            {errNombre && <Text style={[mo.error, { color: T.rojo }]}>El nombre es requerido</Text>}
+          </View>
+
+          {/* Collar */}
+          <View style={mo.field}>
+            <Text style={[mo.label, { color: T.txtSec }]}>ID del collar *</Text>
+            <View style={[mo.inputBox, { borderColor: errCollar ? T.rojo : T.borde, backgroundColor: T.fondo }]}>
+              <TextInput
+                value={collar}
+                onChangeText={(t) => { setCollar(t); if (t.trim()) setErrCollar(false); }}
+                placeholder="Ej: COL-1017, SF-2001..."
+                placeholderTextColor={T.txtTer}
+                style={[mo.inputText, { color: T.txtMain }] as any}
+              />
+            </View>
+            {errCollar && <Text style={[mo.error, { color: T.rojo }]}>El ID del collar es requerido</Text>}
+          </View>
+
+          {/* Categoría */}
+          <View style={mo.field}>
+            <Text style={[mo.label, { color: T.txtSec }]}>Categoría</Text>
+            <View style={mo.pills}>
+              {CATEGORIAS.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[mo.pill, cat === categoria
+                    ? { backgroundColor: T.verdeOscuro, borderColor: T.verdeOscuro }
+                    : { backgroundColor: T.cardElevada, borderColor: T.borde }
+                  ]}
+                  onPress={() => setCategoria(cat)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[mo.pillTxt, { color: cat === categoria ? "#fff" : T.txtMain }]}>{cat}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Potrero */}
+          <View style={mo.field}>
+            <Text style={[mo.label, { color: T.txtSec }]}>Potrero</Text>
+            <View style={mo.pills}>
+              {POTREROS.map((pot) => (
+                <TouchableOpacity
+                  key={pot}
+                  style={[mo.pill, pot === potrero
+                    ? { backgroundColor: T.verdeOscuro, borderColor: T.verdeOscuro }
+                    : { backgroundColor: T.cardElevada, borderColor: T.borde }
+                  ]}
+                  onPress={() => setPotrero(pot)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[mo.pillTxt, { color: pot === potrero ? "#fff" : T.txtMain }]}>
+                    {pot.replace("Potrero ", "")}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={[mo.divider, { backgroundColor: T.borde, marginTop: 16 }]} />
+
+          {/* Actions */}
+          <View style={mo.actions}>
+            <TouchableOpacity
+              style={[mo.cancelBtn, { borderColor: T.borde, backgroundColor: T.card }]}
+              onPress={handleClose}
+              activeOpacity={0.75}
+            >
+              <Text style={[mo.cancelTxt, { color: T.txtSec }]}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[mo.saveBtn, { backgroundColor: T.verdeOscuro }]}
+              onPress={handleRegistrar}
+              activeOpacity={0.85}
+            >
+              <Plus size={15} color="#fff" strokeWidth={2.5} />
+              <Text style={mo.saveTxt}>Registrar animal</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const mo = StyleSheet.create({
+  backdrop:   { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" },
+  dialog:     { width: 480, maxWidth: "92%" as any, borderRadius: 20, borderWidth: 1, overflow: "hidden" as any },
+  header:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 20, paddingBottom: 16 },
+  headerIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  title:      { fontSize: 16, fontWeight: "800" },
+  sub:        { fontSize: 12, marginTop: 2 },
+  closeBtn:   { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  divider:    { height: 1, marginHorizontal: 20 },
+  field:      { paddingHorizontal: 20, paddingTop: 14, gap: 6 },
+  label:      { fontSize: 12, fontWeight: "600" },
+  inputBox:   { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  inputText:  { flex: 1, fontSize: 14 } as any,
+  error:      { fontSize: 11 },
+  pills:      { flexDirection: "row", gap: 8, flexWrap: "wrap" as any },
+  pill:       { borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7 },
+  pillTxt:    { fontSize: 13, fontWeight: "600" },
+  actions:    { flexDirection: "row", gap: 10, padding: 20, paddingTop: 16, justifyContent: "flex-end" },
+  cancelBtn:  { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 9 },
+  cancelTxt:  { fontSize: 14, fontWeight: "600" },
+  saveBtn:    { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 9 },
+  saveTxt:    { fontSize: 14, fontWeight: "700", color: "#fff" },
+});
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const st = StyleSheet.create({
-  root:       { flex: 1, flexDirection: "row" },
-  main:       { flex: 1, flexDirection: "column" },
-  contentRow: { flex: 1, flexDirection: "row", overflow: "hidden" as any },
-  leftArea:   { flex: 1 },
-  leftContent:{ paddingHorizontal: 28, paddingTop: 20, paddingBottom: 24, gap: 0 },
+  root:   { flex: 1, flexDirection: "row" },
+  main:   { flex: 1, flexDirection: "column", overflow: "hidden" as any },
+  body:   { flex: 1, flexDirection: "row", overflow: "hidden" as any },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 60, gap: 12 },
 
   registerBtn:    { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 9 },
   registerBtnTxt: { fontSize: 13, fontWeight: "700", color: "#fff" },
 
-  statCardsRow: { flexDirection: "row", gap: 14, marginBottom: 20 },
-  statCard:     { flex: 1, borderRadius: 14, borderWidth: 1, padding: 16 },
-  statCardTop:  { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  statIconBox:  { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  statValor:    { fontSize: 28, fontWeight: "900" },
-  statLabel:    { fontSize: 11, marginBottom: 8 },
-  statBottom:   { flexDirection: "row", alignItems: "center", gap: 6 },
-  statPct:      { fontSize: 11, fontWeight: "700" },
-  statProgressWrap: { marginTop: 2 },
-  statProgressBg:   { height: 5, borderRadius: 3, overflow: "hidden" as any },
-  statProgressFill: { height: 5, borderRadius: 3 },
+  // Stats
+  statsRow:  { flexDirection: "row", gap: 10 },
+  statCard:  { flex: 1, minWidth: 140, borderRadius: 14, borderWidth: 1, padding: 14, gap: 4 },
+  statTop:   { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  statIcon:  { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  statLabel: { fontSize: 11, marginBottom: 2 },
+  statValor: { fontSize: 26, fontWeight: "900", lineHeight: 28 },
+  statSub:   { fontSize: 11, fontWeight: "600" },
+  progBg:    { height: 5, borderRadius: 3, overflow: "hidden" as any, marginTop: 6 },
+  progFill:  { height: 5, borderRadius: 3 },
 
-  toolbarRow: { flexDirection: "row", gap: 10, marginBottom: 16, alignItems: "center" },
-  searchWrap: { flex: 1, maxWidth: 280, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, height: 38 },
+  // Toolbar
+  toolbar:   { flexDirection: "row", gap: 8, alignItems: "center" },
+  searchBox: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, height: 38, minWidth: 180, flex: 1, maxWidth: 280 },
   searchInput: { flex: 1, fontSize: 13, padding: 0, outlineStyle: "none" as any },
-  filterPill:  { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  filterPillTxt: { fontSize: 12 },
-  iconBtn:     { width: 38, height: 38, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  pill:       { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, height: 38 },
+  pillTxt:    { fontSize: 12, fontWeight: "500" },
+  moreFiltersBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, height: 38 },
+  moreFiltersTxt: { fontSize: 12, fontWeight: "500" },
 
-  table:       { borderRadius: 16, borderWidth: 1, overflow: "hidden" as any, marginBottom: 0 },
-  tableHeader: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: 1 },
-  thCell:      { fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
+  // Table
+  table:   { borderRadius: 14, borderWidth: 1, overflow: "hidden" as any },
+  thead:   { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1 },
+  th:      { fontSize: 10, fontWeight: "700", letterSpacing: 0.4 },
 
-  tableRow:    { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, gap: 8 },
-  tdAnimal:    { flexDirection: "row", alignItems: "center", gap: 10 },
-  rowAvatar:   { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  rowAvatarTxt:{ fontSize: 12, fontWeight: "700" },
-  rowAnimalInfo: { gap: 2 },
-  rowName:     { fontSize: 12, fontWeight: "700" },
-  rowId:       { fontSize: 10 },
-  rowChips:    { flexDirection: "row", gap: 4, marginTop: 2 },
-  rowChip:     { borderWidth: 1, borderRadius: 999, paddingHorizontal: 5, paddingVertical: 1 },
-  rowChipTxt:  { fontSize: 9 },
-  estadoBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, alignSelf: "flex-start" },
-  estadoBadgeTxt: { fontSize: 10, fontWeight: "700" },
+  row:     { flexDirection: "row", alignItems: "center", paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, gap: 6 },
+  cellAnimal: { flexDirection: "row", alignItems: "center", gap: 10 },
+  avatar:  { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  avatarTxt: { fontSize: 12, fontWeight: "800" },
+  animalInfo: { gap: 1 },
+  animalName: { fontSize: 12, fontWeight: "700" },
+  animalSub:  { fontSize: 10 },
+  chips:   { flexDirection: "row", gap: 4, marginTop: 2 },
+  chip:    { borderWidth: 1, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
+  chipTxt: { fontSize: 9, fontWeight: "600" },
+  badge:   { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start" },
+  badgeTxt: { fontSize: 10, fontWeight: "700" },
+  cellTxt:  { fontSize: 11 },
+  cellTxtBold: { fontSize: 11, fontWeight: "700" },
+  subTxt:  { fontSize: 10 },
+  coordTxt: { fontSize: 9 },
+  cellRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  cellCenter: { alignItems: "flex-start" },
+  batBg:   { height: 4, borderRadius: 2, overflow: "hidden" as any, width: 60, marginTop: 4 },
+  batFill: { height: 4, borderRadius: 2 },
+  actions: { flexDirection: "row", gap: 4, alignItems: "center" },
+  actionBtn: { width: 26, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center" },
 
-  // Salud sensor
-  saludRow:    { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start" },
-  saludLabel:  { fontSize: 10, fontWeight: "700" },
-  saludRgb:    { fontSize: 9, marginTop: 3 },
+  emptyBox: { alignItems: "center", justifyContent: "center", paddingVertical: 48, gap: 10, borderBottomWidth: 1 },
+  emptyTxt: { fontSize: 13 },
 
-  // Collar badge
-  collarBadge:    { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, alignSelf: "flex-start", marginTop: 3 },
-  collarBadgeTxt: { fontSize: 9, fontWeight: "700" },
+  // Pagination
+  pagination: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, borderTopWidth: 1, gap: 8, flexWrap: "wrap" as any },
+  paginInfo:  { fontSize: 12, flex: 1 },
+  paginBtns:  { flexDirection: "row", gap: 4 },
+  pBtn:       { width: 30, height: 30, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  pBtnTxt:    { fontSize: 12, fontWeight: "600" },
 
-  tdRow:    { flexDirection: "row", alignItems: "center", gap: 4 },
-  tdTxt:    { fontSize: 11 },
-  tdSubTxt: { fontSize: 10 },
-  batBarBg: { height: 5, borderRadius: 3, overflow: "hidden" as any, width: 55 },
-  batBarFill: { height: 5, borderRadius: 3 },
-  actionsCell: { flexDirection: "row", gap: 4, alignItems: "center" },
-  actionBtn:   { width: 26, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-
-  emptyRow:  { alignItems: "center", justifyContent: "center", paddingVertical: 48, gap: 10, borderBottomWidth: 1 },
-  emptyTxt:  { fontSize: 13 },
-
-  paginationRow:  { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, gap: 12 },
-  paginationInfo: { fontSize: 12, flex: 1 },
-  paginationBtns: { flexDirection: "row", gap: 4, alignItems: "center" },
-  pageBtn:     { width: 30, height: 30, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  pageBtnTxt:  { fontSize: 12, fontWeight: "600" },
+  // Mobile cards
+  cardList: { gap: 10 },
+  mCard:    { borderRadius: 14, borderWidth: 1, padding: 14, gap: 0 },
+  mCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  mDivider: { height: 1, marginVertical: 12 },
+  mCardBottom: { flexDirection: "row", gap: 0, justifyContent: "space-between" },
+  mStat:    { flex: 1, gap: 4 },
+  mStatLabel: { fontSize: 10 },
+  mStatVal:   { fontSize: 12, fontWeight: "700" },
+  mActions: { flexDirection: "row", gap: 8, marginTop: 12 },
+  mActionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderWidth: 1, borderRadius: 8, paddingVertical: 8 },
+  mActionTxt: { fontSize: 11, fontWeight: "600" },
 
   // Right panel
-  rightPanel: { width: 260, borderLeftWidth: 1, paddingHorizontal: 18, paddingTop: 20, paddingBottom: 20 },
-  rightPanelHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
-  rightPanelTitle: { fontSize: 14, fontWeight: "700" },
-  limpiarTxt:  { fontSize: 12, fontWeight: "600" },
-  filterSection: { marginBottom: 12, gap: 6 },
-  filterSectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
-  filterDropdown: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  filterDropdownTxt: { fontSize: 13 },
-  applyBtn:    { borderRadius: 12, paddingVertical: 12, alignItems: "center", justifyContent: "center", marginTop: 16, marginBottom: 16 },
-  applyBtnTxt: { fontSize: 14, fontWeight: "700", color: "#fff" },
-  divider:     { height: 1, marginBottom: 16 },
-  summaryTitle: { fontSize: 13, fontWeight: "700", marginBottom: 10 },
-  potreroRow:  { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  potreroDot:  { width: 8, height: 8, borderRadius: 4 },
-  potreroName: { fontSize: 12, flex: 1 },
-  potreroCount: { fontSize: 12 },
-  verMapaLink: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 12 },
-  verMapaTxt:  { fontSize: 12 },
+  rightPanel: { width: 255, borderLeftWidth: 1, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16 },
+  rpHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+  rpTitle:  { fontSize: 14, fontWeight: "700" },
+  rpClear:  { fontSize: 12, fontWeight: "600" },
+  rpFilter: { marginBottom: 12, gap: 5 },
+  rpFilterLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" as any },
+  rpDropdown: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  rpDropdownTxt: { fontSize: 13 },
+  applyBtn:    { borderRadius: 12, paddingVertical: 12, alignItems: "center", justifyContent: "center", marginTop: 4, marginBottom: 16 },
+  applyBtnTxt: { fontSize: 13, fontWeight: "700", color: "#fff" },
+  rpDivider:   { height: 1, marginBottom: 16 },
+  rpSectionTitle: { fontSize: 12, fontWeight: "700", marginBottom: 10 },
+  rpPotreroRow:   { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  rpDot:       { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  rpPotreroName: { fontSize: 12, flex: 1 },
+  rpPotreroCount: { fontSize: 12, fontWeight: "600" },
+  mapLink:     { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12 },
+  mapLinkTxt:  { fontSize: 12, fontWeight: "600" },
 });

@@ -15,7 +15,6 @@ import {
   Settings,
   Info,
   LogOut,
-  Cpu,
   BarChart2,
   Brain,
 } from "lucide-react-native";
@@ -50,8 +49,7 @@ const NAV_ITEMS: NavItem[] = [
   { icon: Brain,    label: "Salud IA",      route: "SaludIA"  },
   { icon: Map,      label: "Cerca virtual",  route: "Map"      },
   { icon: Bell,     label: "Alertas",        route: "Alerts"   },
-  { icon: Cpu,      label: "Dispositivos",   route: "Devices"  },
-  { icon: BarChart2,label: "Información",    route: "Info"     },
+{ icon: BarChart2,label: "Información",    route: "Info"     },
   { icon: Settings, label: "Configuración", route: "Settings" },
 ];
 
@@ -102,10 +100,9 @@ export default function WebSidebar({ activeRoute }: WebSidebarProps) {
         {!collapsed && (
           <View style={st.logoTextWrap}>
             <Text style={st.brandRow}>
-              <Text style={[st.brandMain, { color: T.txtMain }]}>SMARTFENCE </Text>
-              <Text style={[st.brandAi, { color: T.verde }]}>AI</Text>
+              <Text style={[st.brandMain, { color: T.txtMain }]}>Smart</Text>
+              <Text style={[st.brandAi, { color: T.verde }]}>fence</Text>
             </Text>
-            <Text style={[st.brandSub, { color: T.txtSec }]}>GANADO INTELIGENTE</Text>
           </View>
         )}
       </View>

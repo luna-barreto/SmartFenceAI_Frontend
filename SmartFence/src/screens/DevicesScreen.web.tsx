@@ -492,7 +492,7 @@ const st = StyleSheet.create({
   main: { flex: 1, flexDirection: "column" },
 
   scroll:  { flex: 1 },
-  content: { paddingHorizontal: 28, paddingTop: 20, paddingBottom: 32, gap: 0 },
+  content: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 80, gap: 0 },
 
   registerBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,
@@ -501,8 +501,8 @@ const st = StyleSheet.create({
   registerBtnTxt: { fontSize: 13, fontWeight: "700", color: "#fff" },
 
   // Stat cards
-  statCardsRow: { flexDirection: "row", gap: 14, marginBottom: 20 },
-  statCard: { flex: 1, borderRadius: 14, borderWidth: 1, padding: 16 },
+  statCardsRow: { flexDirection: "row", gap: 10, marginBottom: 16, flexWrap: "wrap" },
+  statCard: { flex: 1, borderRadius: 14, borderWidth: 1, padding: 14, minWidth: 130 },
   statCardTop: {
     flexDirection: "row", alignItems: "center",
     justifyContent: "space-between", marginBottom: 4,
@@ -519,7 +519,7 @@ const st = StyleSheet.create({
     flexDirection: "row", gap: 10, marginBottom: 16, alignItems: "center",
   },
   searchWrap: {
-    flex: 1, maxWidth: 320,
+    flex: 1, minWidth: 120,
     flexDirection: "row", alignItems: "center", gap: 8,
     borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, height: 38,
   },
