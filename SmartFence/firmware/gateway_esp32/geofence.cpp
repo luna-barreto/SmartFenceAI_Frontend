@@ -56,17 +56,17 @@ bool geofenceHasFence(uint16_t collarId) {
 }
 
 // ─── Point-in-polygon — ray-casting ───────────────────────────────────────────
-bool geofenceIsInside(uint16_t collarId, float lat, float lng) {
+bool geofenceIsInside(uint16_t collarId, double lat, double lng) {
   FenceSlot* f = findFence(collarId);
   if (!f) return true;  // sin cerca → no hay fuera-de-cerca
 
-  int  crossings = 0;
-  int  n = f->n;
+  int crossings = 0;
+  int n = f->n;
   for (int i = 0, j = n - 1; i < n; j = i++) {
-    float xi = f->pts[i].lng, yi = f->pts[i].lat;
-    float xj = f->pts[j].lng, yj = f->pts[j].lat;
-    bool  cond1 = (yi > lat) != (yj > lat);
-    bool  cond2 = (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    double xi = f->pts[i].lng, yi = f->pts[i].lat;
+    double xj = f->pts[j].lng, yj = f->pts[j].lat;
+    bool cond1 = (yi > lat) != (yj > lat);
+    bool cond2 = (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
     if (cond1 && cond2) crossings++;
   }
   return (crossings % 2) == 1;   // impar = dentro

@@ -13,7 +13,7 @@
 #define MAX_FENCE_POINTS  30   // vértices máx por polígono
 #define MAX_CERCAS         5   // cercas simultáneas (1 global + 4 individuales)
 
-struct GeoPoint { float lat, lng; };
+struct GeoPoint { double lat, lng; };
 
 void geofenceInit();
 
@@ -27,7 +27,7 @@ bool geofenceHasFence(uint16_t collarId);
 // True si (lat, lng) está DENTRO de la cerca aplicable al collar.
 // Prioridad: cerca específica > cerca global (collarId=0).
 // Si no hay cerca configurada devuelve true (asume dentro).
-bool geofenceIsInside(uint16_t collarId, float lat, float lng);
+bool geofenceIsInside(uint16_t collarId, double lat, double lng);
 
 // Cuántas cercas hay cargadas actualmente.
 int geofenceCount();

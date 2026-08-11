@@ -1,30 +1,22 @@
 /**
  * SmartFence AI — Firmware del Gateway
  * ──────────────────────────────────────
- * Hardware  : ESP32-S3  (Heltec WiFi LoRa 32 V3 recomendado)
- * Recibe    : paquetes binarios LoRa de los collares
- * Publica   : JSON por MQTT al backend NestJS
- * Valida    : CRC-16 de cada paquete antes de publicar
- * Pantalla  : OLED 128x64 con estado de WiFi/MQTT/LoRa
+ * Hardware : TTGO LoRa32 V1.6  (ESP32 + SX1276 + OLED 128×64)
+ * Recibe   : paquetes binarios LoRa 15 bytes de los collares (cada 7 s)
+ * Publica  : JSON por MQTT TLS → HiveMQ Cloud → backend NestJS
  *
- * Tópicos MQTT publicados:
- *   smartfence/gps      → posición + sensores (principal)
- *   smartfence/battery  → batería
- *   smartfence/status   → correa + contacto
- *   smartfence/events   → eventos (boot, low_battery, fuera_cerca)
+ * Tópicos publicados:
+ *   smartfence/gps             → posición + batería (cada paquete LoRa)
+ *   smartfence/battery         → solo cuando batería < 20 %
+ *   smartfence/events          → gateway_boot al arrancar
+ *   smartfence/gateway/heartbeat → estado cada 30 s
  *
- * Tópico MQTT suscrito:
- *   smartfence/config   → recibe geocerca desde el backend
+ * Tópicos suscritos:
+ *   smartfence/config          → geocerca desde el backend
+ *   smartfence/gateway/collares → mapa serial→nombre desde el backend
  *
- * Librerías (Gestor de librerías):
- *   - RadioLib       (Jan Gromes)
- *   - PubSubClient   (Nick O'Leary)
- *   - ArduinoJson    (Benoit Blanchon) v7+
- *   - Adafruit SSD1306
- *   - Adafruit GFX
- *
- * Board manager: https://dl.espressif.com/dl/package_esp32_index.json
- * Placa: TTGO LoRa32-OLED  (o ESP32 Dev Module)
+ * Librerías (Gestor de librerías Arduino IDE):
+ *   RadioLib, PubSubClient, ArduinoJson v7+, Adafruit SSD1306, Adafruit GFX
  */
 
 #include <SPI.h>
@@ -46,99 +38,76 @@
 
 // ─── LoRa SX1276 ─────────────────────────────────────────────────────────────
 static SX1276 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
-static bool   _loraOk      = false;
-static volatile bool _pktReady = false;   // flag seteado por la ISR de DIO0
+static bool          _loraOk   = false;
+static volatile bool _pktReady = false;
 
-// ISR — se ejecuta cuando SX1276 señala RxDone en DIO0
-void IRAM_ATTR onLoraReceived() {
-  _pktReady = true;
-}
+void IRAM_ATTR onLoraReceived() { _pktReady = true; }
 
-// ─── WiFi + MQTT (TLS — HiveMQ Cloud puerto 8883) ────────────────────────────
+// ─── WiFi + MQTT ─────────────────────────────────────────────────────────────
 static WiFiClientSecure wifiClient;
 static PubSubClient     mqtt(wifiClient);
 
-// ─── Estado del gateway ───────────────────────────────────────────────────────
-static GwDisplayInfo dispInfo = {};
-static unsigned long tHeartbeat    = 0;
-static unsigned long tReconectWifi = 0;
-static unsigned long tDisplay      = 0;
+// ─── Estado global ────────────────────────────────────────────────────────────
+static GwDisplayInfo dispInfo    = {};
+static unsigned long tHeartbeat  = 0;
+static unsigned long tWifi       = 0;
+static unsigned long tMqtt       = 0;
+static unsigned long tDisplay    = 0;
 
-// ─── Seguimiento de collares activos (últimos 60 s) ───────────────────────────
-#define MAX_COLLARES_ACTIVOS  20
-#define COLLAR_TIMEOUT_MS     60000UL
+// ─── Collares activos (ventana 20 s) ─────────────────────────────────────────
+#define MAX_COLLARES 20
+#define COLLAR_TTL   20000UL
 
-struct CollarVivo {
-  uint16_t     collarId;
-  unsigned long ultimoMs;
-};
-static CollarVivo _vivos[MAX_COLLARES_ACTIVOS];
+struct CollarVivo { uint16_t id; unsigned long ms; };
+static CollarVivo _vivos[MAX_COLLARES];
 static int        _nVivos = 0;
 
-static void registrarCollarActivo(uint16_t collarId) {
+static void registrarCollar(uint16_t id) {
   unsigned long ahora = millis();
-  // Actualizar si ya existe
   for (int i = 0; i < _nVivos; i++) {
-    if (_vivos[i].collarId == collarId) {
-      _vivos[i].ultimoMs = ahora;
-      return;
-    }
+    if (_vivos[i].id == id) { _vivos[i].ms = ahora; return; }
   }
-  // Agregar nuevo
-  if (_nVivos < MAX_COLLARES_ACTIVOS) {
-    _vivos[_nVivos++] = { collarId, ahora };
-  }
+  if (_nVivos < MAX_COLLARES) _vivos[_nVivos++] = { id, ahora };
 }
 
-static int contarCollaresVivos() {
+static int collaresVivos() {
   unsigned long ahora = millis();
-  int c = 0;
-  for (int i = 0; i < _nVivos; i++) {
-    if (ahora - _vivos[i].ultimoMs < COLLAR_TIMEOUT_MS) c++;
-  }
-  return c;
+  int n = 0;
+  for (int i = 0; i < _nVivos; i++)
+    if (ahora - _vivos[i].ms < COLLAR_TTL) n++;
+  return n;
 }
 
 // ─── WiFi ─────────────────────────────────────────────────────────────────────
 static void conectarWifi() {
   if (WiFi.status() == WL_CONNECTED) return;
-  debugPrintf("[WiFi] conectando a %s...\n", WIFI_SSID);
+  debugPrintf("[WiFi] conectando a '%s'...\n", WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   unsigned long t0 = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - t0 < TIMEOUT_WIFI_MS) {
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000UL)
     delay(300);
-  }
+
   if (WiFi.status() == WL_CONNECTED) {
     debugPrintf("[WiFi] OK — IP: %s\n", WiFi.localIP().toString().c_str());
     dispInfo.wifiOk = true;
     ledBlink(2);
   } else {
-    debugPrint("[WiFi] FALLO — reintentando...");
+    debugPrint("[WiFi] FALLO — reintentando en 30s");
     dispInfo.wifiOk = false;
   }
 }
 
-// ─── Callback MQTT — recibe mensajes del backend ─────────────────────────────
+// ─── MQTT callback ────────────────────────────────────────────────────────────
 static void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  debugPrintf("[MQTT] mensaje en %s (%d bytes)\n", topic, length);
+  debugPrintf("[MQTT] %s (%u bytes)\n", topic, length);
 
-  // ── smartfence/config — geocerca enviada desde el backend ──────────────────
-  // Formato: { "collarId": 1, "geocerca": [{"lat":-4.001,"lng":-79.201}, ...] }
-  // collarId = 0 → cerca global (aplica a todos los collares sin cerca propia)
   if (strcmp(topic, TOPIC_CONFIG) == 0) {
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, payload, length);
-    if (err) { debugPrint("[MQTT] JSON invalido en config"); return; }
-
+    if (deserializeJson(doc, payload, length)) return;
     uint16_t cid = doc["collarId"] | 0;
     JsonArray arr = doc["geocerca"].as<JsonArray>();
     int n = (int)arr.size();
-
-    if (n < 3 || n > MAX_FENCE_POINTS) {
-      debugPrintf("[MQTT] geocerca invalida: %d puntos\n", n);
-      return;
-    }
-
+    if (n < 3 || n > MAX_FENCE_POINTS) return;
     GeoPoint pts[MAX_FENCE_POINTS];
     int i = 0;
     for (JsonObject p : arr) {
@@ -146,24 +115,16 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
       pts[i].lng = p["lng"] | 0.0f;
       i++;
     }
-
     geofenceSet(cid, pts, n);
-    debugPrintf("[GEO] cerca actualizada en vivo para collarId=%d (%d pts)\n", cid, n);
+    debugPrintf("[GEO] geocerca actualizada collarId=%d (%d pts)\n", cid, n);
     return;
   }
 
-  // ── smartfence/gateway/collares — mapa de collares desde el backend ─────────
-  // Formato: { "fincaId": "...", "collares": [{"id":1,"serial":"SF-0001","nombre":"Vaca 1"}, ...] }
-  // Reemplaza el array hardcodeado de telemetry.h — se llama cada vez que se
-  // registra, edita o elimina un animal o collar desde la app.
   if (strcmp(topic, TOPIC_COLLARES) == 0) {
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, payload, length);
-    if (err) { debugPrint("[MQTT] JSON invalido en collares"); return; }
-
+    if (deserializeJson(doc, payload, length)) return;
     JsonArray arr = doc["collares"].as<JsonArray>();
-    if (arr.isNull()) { debugPrint("[MQTT] collares: array nulo"); return; }
-
+    if (arr.isNull()) return;
     collarMapClear();
     int total = 0;
     for (JsonObject c : arr) {
@@ -173,26 +134,64 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
       collarMapSet(cid, serial, nombre);
       total++;
     }
-    debugPrintf("[MQTT] mapa de collares actualizado: %d collar(es)\n", total);
+    debugPrintf("[MQTT] mapa collares: %d\n", total);
+    return;
+  }
+
+  // smartfence/collar/<serial>/command — comando del backend al collar
+  if (strncmp(topic, "smartfence/collar/", 18) == 0) {
+    JsonDocument doc;
+    if (deserializeJson(doc, payload, length)) return;
+    const char* comando   = doc["command"]  | "";
+    uint32_t    duracion  = doc["duration"] | 5000;
+
+    uint8_t cmd = 0;
+    if (strcmp(comando, "BUZZER_ON")  == 0) cmd = 0x01;
+    if (strcmp(comando, "BUZZER_OFF") == 0) cmd = 0x02;
+    if (cmd == 0) return;
+
+    // Extraer serial del tópico: smartfence/collar/SF-0001/command
+    const char* p = topic + 18;
+    char serial[16] = {};
+    int i = 0;
+    while (p[i] && p[i] != '/' && i < 15) { serial[i] = p[i]; i++; }
+    uint16_t cid = collarIdPorSerial(serial);
+
+    // Armar CommandPacket y enviar por LoRa
+    #define CMD_PKT_MAGIC 0xCD
+    #pragma pack(push,1)
+    struct CmdPkt { uint8_t magic; uint16_t collarId; uint8_t cmd; uint32_t duracionMs; uint16_t crc; };
+    #pragma pack(pop)
+
+    CmdPkt pkt = {};
+    pkt.magic      = CMD_PKT_MAGIC;
+    pkt.collarId   = cid;
+    pkt.cmd        = cmd;
+    pkt.duracionMs = duracion;
+    pkt.crc        = calcCRC16((const uint8_t*)&pkt, sizeof(pkt) - 2);
+
+    radio.standby();
+    radio.clearDio0Action();
+    radio.transmit((uint8_t*)&pkt, sizeof(pkt));
+    _pktReady = false;
+    radio.setDio0Action(onLoraReceived, RISING);
+    radio.startReceive();
+
+    debugPrintf("[CMD] %s cmd=%d dur=%lu ms → collar %d\n", serial, cmd, duracion, cid);
     return;
   }
 }
 
-// ─── MQTT ─────────────────────────────────────────────────────────────────────
+// ─── MQTT conexión ────────────────────────────────────────────────────────────
 static void conectarMqtt() {
   if (mqtt.connected()) return;
   debugPrintf("[MQTT] conectando a %s:%d...\n", MQTT_SERVER, MQTT_PORT);
-
-  bool ok;
-  if (strlen(MQTT_USER) > 0)
-    ok = mqtt.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS);
-  else
-    ok = mqtt.connect(MQTT_CLIENT_ID);
-
+  bool ok = mqtt.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS);
   if (ok) {
     debugPrint("[MQTT] conectado");
     mqtt.subscribe(TOPIC_CONFIG);
     mqtt.subscribe(TOPIC_COLLARES);
+    mqtt.subscribe("smartfence/collar/+/command");
     dispInfo.mqttOk = true;
     ledBlink(1);
   } else {
@@ -201,102 +200,51 @@ static void conectarMqtt() {
   }
 }
 
-// ─── Publicar paquete recibido como JSON al backend ───────────────────────────
-static void publicarPaquete(const TelemetryPacket& pkt, int rssi) {
+// ─── Publicar telemetría al backend ───────────────────────────────────────────
+static void publicarPaquete(const TelemetryPacket& pkt) {
   const char* serial = collarSerial(pkt.collarId);
-  const char* nombre = collarNombre(pkt.collarId);
+  float lat = pkt.latE6 / 1e6f;
+  float lng = pkt.lngE6 / 1e6f;
+  bool  gpsOk       = (pkt.flags & FLAG_GPS_VALID) != 0;
+  bool  fueraCerca  = gpsOk && !geofenceIsInside(pkt.collarId, lat, lng);
 
-  float lat  = pkt.latE6 / 1e6f;
-  float lng  = pkt.lngE6 / 1e6f;
-  float vel  = pkt.speedCmS / 100.0f * 3.6f;   // cm/s → km/h
-  float hdop = pkt.hdop10 / 10.0f;
-
-  // Detectar si la vaca está fuera de la cerca en el gateway.
-  // Solo evaluar si el GPS es válido; si no hay cerca configurada se asume dentro.
-  bool gpsValido    = (pkt.flags & FLAG_GPS_VALID) != 0;
-  bool fueraDeCerca = false;
-  if (gpsValido) {
-    fueraDeCerca = !geofenceIsInside(pkt.collarId, lat, lng);
-  }
-
-  // ── smartfence/gps ──────────────────────────────────────────────────────
+  // smartfence/gps — siempre
   {
     JsonDocument doc;
-    doc["serial"]                = serial;
-    doc["nombre"]                = nombre;
-    doc["lat"]                   = lat;
-    doc["lng"]                   = lng;
-    doc["velocidadKmh"]          = vel;
-    doc["bateria"]               = pkt.battery;
-    doc["magnitudImuG"]          = 1.0;   // sin IMU en este collar
-    doc["tensionCorreaOk"]       = (bool)(pkt.flags & FLAG_TENSION_OK);
-    doc["contactoPielDetectado"] = (bool)(pkt.flags & FLAG_CONTACTO_PIEL);
-    doc["satellites"]            = pkt.satellites;
-    doc["hdop"]                  = hdop;
-    doc["rssiGateway"]           = rssi;
-    doc["fueraDeCerca"]          = fueraDeCerca;
-    doc["tieneCerca"]            = geofenceHasFence(pkt.collarId);
-
-    char buf[400];
+    doc["serial"]     = serial;
+    doc["lat"]        = lat;
+    doc["lng"]        = lng;
+    doc["bateria"]    = pkt.battery;
+    if (pkt.flags & FLAG_MOVING) doc["magnitudImuG"] = 1.5f;
+    doc["fueraDeCerca"] = fueraCerca;
+    doc["tieneCerca"]   = geofenceHasFence(pkt.collarId);
+    char buf[256];
     serializeJson(doc, buf, sizeof(buf));
     mqtt.publish(TOPIC_GPS, buf, false);
-    debugPrintf("[MQTT→GPS] %s\n", buf);
+    debugPrintf("[GPS] %s\n", buf);
   }
 
-  // ── smartfence/battery (si batería baja) ────────────────────────────────
+  // smartfence/battery — solo si batería baja
   if (pkt.flags & FLAG_LOW_BAT) {
     JsonDocument doc;
     doc["serial"]  = serial;
-    doc["nombre"]  = nombre;
     doc["bateria"] = pkt.battery;
     char buf[64];
     serializeJson(doc, buf, sizeof(buf));
     mqtt.publish(TOPIC_BATTERY, buf, false);
   }
-
-  // ── smartfence/status ────────────────────────────────────────────────────
-  {
-    JsonDocument doc;
-    doc["serial"]                = serial;
-    doc["nombre"]                = nombre;
-    doc["tensionCorreaOk"]       = (bool)(pkt.flags & FLAG_TENSION_OK);
-    doc["contactoPielDetectado"] = (bool)(pkt.flags & FLAG_CONTACTO_PIEL);
-    char buf[128];
-    serializeJson(doc, buf, sizeof(buf));
-    mqtt.publish(TOPIC_STATUS, buf, false);
-  }
-
-  // ── smartfence/events — eventos especiales ───────────────────────────────
-  const char* evento = nullptr;
-  if (pkt.status == STATUS_BOOTING)     evento = "boot";
-  if (fueraDeCerca)                     evento = "fuera_cerca";
-  if (pkt.status == STATUS_LOW_BATTERY) evento = "bateria_baja";
-  if (pkt.status == STATUS_COLLAR_OFF)  evento = "collar_retirado";
-
-  if (evento) {
-    JsonDocument doc;
-    doc["serial"] = serial;
-    doc["nombre"] = nombre;
-    doc["evento"] = evento;
-    char buf[64];
-    serializeJson(doc, buf, sizeof(buf));
-    mqtt.publish(TOPIC_EVENTS, buf, false);
-  }
-
-  // (conteo actualizado antes de llamar esta función)
 }
 
-// ─── Heartbeat — el gateway se anuncia al broker ─────────────────────────────
+// ─── Heartbeat ────────────────────────────────────────────────────────────────
 static void publicarHeartbeat() {
   JsonDocument doc;
-  doc["gateway"] = MQTT_CLIENT_ID;
-  doc["uptime"]  = millis() / 1000;
-  doc["ip"]      = WiFi.localIP().toString();
-  doc["rssi_wifi"]= WiFi.RSSI();
+  doc["gateway"]   = MQTT_CLIENT_ID;
+  doc["uptime"]    = millis() / 1000;
+  doc["ip"]        = WiFi.localIP().toString();
+  doc["rssi_wifi"] = WiFi.RSSI();
   char buf[128];
   serializeJson(doc, buf, sizeof(buf));
   mqtt.publish("smartfence/gateway/heartbeat", buf, false);
-  debugPrint("[MQTT] heartbeat enviado");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -304,8 +252,8 @@ static void publicarHeartbeat() {
 // ═════════════════════════════════════════════════════════════════════════════
 void setup() {
   Serial.begin(DEBUG_BAUD);
-  delay(500);
-  debugPrint("\n=== SmartFence AI — Gateway iniciando ===");
+  delay(300);
+  debugPrint("\n=== SmartFence Gateway iniciando ===");
 
   pinMode(LED_PIN, OUTPUT);
   pinMode(BTN_PIN, INPUT_PULLUP);
@@ -313,57 +261,50 @@ void setup() {
   geofenceInit();
   gwDisplayInit();
 
-  // ── LoRa SX1262 ─────────────────────────────────────────────────────────
+  // ── LoRa ────────────────────────────────────────────────────────────────
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
-  int state = radio.begin(
-    (float)LORA_FREQ / 1e6,
-    (float)125.0,   // BW kHz
-    9,              // SF
-    5,              // CR 4/5
-    LORA_SYNC_WORD,
-    17,             // TX power
-    8               // preamble
-  );
-
-  if (state == RADIOLIB_ERR_NONE) {
-    radio.setCRC(true);
-    // Modo recepción continua con interrupción — no bloquea el loop
+  int st = radio.begin(LORA_FREQ / 1e6f, 125.0f, 9, 5, LORA_SYNC_WORD, 17, 8);
+  if (st == RADIOLIB_ERR_NONE) {
+    radio.setCRC(true);   // collar usa enableCrc() → SX1276 valida y entrega exactamente PACKET_SIZE bytes
     radio.setDio0Action(onLoraReceived, RISING);
-    int rxState = radio.startReceive();
-    if (rxState == RADIOLIB_ERR_NONE) {
+    if (radio.startReceive() == RADIOLIB_ERR_NONE) {
       _loraOk = true;
       dispInfo.loraOk = true;
-      debugPrint("[LoRa] OK — escucha continua activa");
-    } else {
-      debugPrintf("[LoRa] ERROR startReceive: %d\n", rxState);
+      debugPrint("[LoRa] OK");
     }
   } else {
-    debugPrintf("[LoRa] ERROR init: %d\n", state);
+    debugPrintf("[LoRa] ERROR init: %d\n", st);
   }
 
-  // ── WiFi + MQTT (HiveMQ Cloud TLS) ──────────────────────────────────────
-  wifiClient.setInsecure();   // acepta el certificado de HiveMQ sin pinning
+  // ── WiFi + MQTT ──────────────────────────────────────────────────────────
+  wifiClient.setInsecure();     // acepta certificado HiveMQ sin pinning
+  wifiClient.setTimeout(4000);  // TLS handshake máx 4 s (evita bloqueos largos)
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+
   conectarWifi();
+
   mqtt.setServer(MQTT_SERVER, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
   mqtt.setBufferSize(1024);
   mqtt.setKeepAlive(MQTT_KEEPALIVE_S);
   conectarMqtt();
 
-  // Heartbeat de arranque
   if (mqtt.connected()) {
     publicarHeartbeat();
+    // Notificar boot al backend — el backend debe responder con el mapa de collares
     JsonDocument doc;
-    doc["gateway"] = MQTT_CLIENT_ID;
-    doc["evento"]  = "gateway_boot";
-    char buf[64];
+    doc["serial"] = MQTT_CLIENT_ID;
+    doc["evento"] = "gateway_boot";
+    char buf[128];
     serializeJson(doc, buf, sizeof(buf));
-    mqtt.publish("smartfence/gateway/heartbeat", buf, false);
+    mqtt.publish(TOPIC_EVENTS, buf, false);
+    // Pedir explícitamente el mapa de collares al backend
+    mqtt.publish("smartfence/gateway/request_collares", buf, false);
   }
 
   ledBlink(3);
-  debugPrint("[MAIN] Gateway listo — escuchando LoRa");
+  debugPrint("[MAIN] listo — escuchando LoRa");
   gwDisplayUpdate(dispInfo);
 }
 
@@ -374,70 +315,72 @@ void loop() {
   unsigned long ahora = millis();
 
   // ── Mantener WiFi ─────────────────────────────────────────────────────────
-  if (WiFi.status() != WL_CONNECTED && ahora - tReconectWifi > TIMEOUT_WIFI_MS) {
-    tReconectWifi = ahora;
+  if (WiFi.status() != WL_CONNECTED && ahora - tWifi > 15000UL) {
+    tWifi = ahora;
     dispInfo.wifiOk = false;
     conectarWifi();
   }
 
-  // ── Mantener MQTT ─────────────────────────────────────────────────────────
-  if (!mqtt.connected() && WiFi.status() == WL_CONNECTED) {
+  // ── Mantener MQTT (reintentar cada 10 s) ─────────────────────────────────
+  if (!mqtt.connected() && WiFi.status() == WL_CONNECTED && ahora - tMqtt > 10000UL) {
+    tMqtt = ahora;
     conectarMqtt();
   }
   mqtt.loop();
 
-  // ── Recibir paquete LoRa (no-bloqueante, basado en ISR) ──────────────────
+  // ── Recibir LoRa (ISR no-bloqueante) ─────────────────────────────────────
   if (_loraOk && _pktReady) {
     _pktReady = false;
 
-    uint8_t buf[PACKET_SIZE];
-    int state = radio.readData(buf, PACKET_SIZE);
+    // Leer longitud ANTES de readData — después el FIFO ya fue consumido.
+    // El collar usa arduino-LoRa enableCrc() que añade 2 bytes CRC hardware,
+    // por eso pktLen puede ser PACKET_SIZE (15) o PACKET_SIZE+2 (17).
+    // Leer siempre pktLen bytes para vaciar el FIFO; los primeros 15 son el paquete.
+    int pktLen = (int)radio.getPacketLength();
+    debugPrintf("[LoRa] pktLen=%d\n", pktLen);
 
-    if (state == RADIOLIB_ERR_NONE) {
-      if (radio.getPacketLength() != PACKET_SIZE) {
-        debugPrintf("[LoRa] tamano incorrecto: %d bytes\n",
-                    (int)radio.getPacketLength());
-      } else {
+    uint8_t buf[PACKET_SIZE] = {};
+    int st = radio.readData(buf, PACKET_SIZE);
+
+    if (st == RADIOLIB_ERR_NONE) {
+      {
         TelemetryPacket pkt;
         memcpy(&pkt, buf, PACKET_SIZE);
 
-        uint16_t crcCalculado = calcCRC16(buf, PACKET_SIZE - 2);
-        if (crcCalculado != pkt.crc) {
-          debugPrintf("[LoRa] CRC invalido — calculado=0x%04X recibido=0x%04X\n",
-                      crcCalculado, pkt.crc);
+        if (calcCRC16(buf, PACKET_SIZE - 2) != pkt.crc) {
+          debugPrint("[LoRa] CRC invalido — paquete descartado");
         } else {
           int rssi = (int)radio.getRSSI();
-          debugPrintf("[LoRa] RX collar=%d bat=%d%% sat=%d RSSI=%ddBm\n",
-                      pkt.collarId, pkt.battery, pkt.satellites, rssi);
-
+          debugPrintf("[LoRa] RX collar=%d bat=%d%% RSSI=%ddBm\n",
+                      pkt.collarId, pkt.battery, rssi);
           ledBlink(1, 50);
 
-          // Registrar collar activo siempre, con o sin MQTT
-          registrarCollarActivo(pkt.collarId);
-          dispInfo.collaresVivos = (uint8_t)contarCollaresVivos();
+          registrarCollar(pkt.collarId);
+          dispInfo.collaresVivos   = (uint8_t)collaresVivos();
           dispInfo.paquetesHoy++;
-          dispInfo.rssiUltimo = rssi;
-          strncpy(dispInfo.ultimoSerial, collarSerial(pkt.collarId),
-                  sizeof(dispInfo.ultimoSerial) - 1);
-          strncpy(dispInfo.ultimoNombre, collarNombre(pkt.collarId),
-                  sizeof(dispInfo.ultimoNombre) - 1);
-          dispInfo.ultimoLat      = pkt.latE6 / 1e6f;
-          dispInfo.ultimoLng      = pkt.lngE6 / 1e6f;
-          dispInfo.ultimoGpsValido = (pkt.flags & FLAG_GPS_VALID) != 0;
+          dispInfo.rssiUltimo      = rssi;
+          strncpy(dispInfo.ultimoSerial, collarSerial(pkt.collarId), sizeof(dispInfo.ultimoSerial) - 1);
+          strncpy(dispInfo.ultimoNombre, collarNombre(pkt.collarId), sizeof(dispInfo.ultimoNombre) - 1);
+          // Solo actualizar coordenadas cuando el paquete trae fix válido.
+          // Si no trae GPS, conservar las últimas coordenadas conocidas.
+          if (pkt.flags & FLAG_GPS_VALID) {
+            dispInfo.ultimoLat       = pkt.latE6 / 1e6f;
+            dispInfo.ultimoLng       = pkt.lngE6 / 1e6f;
+            dispInfo.ultimoGpsValido = true;
+          }
 
           if (mqtt.connected()) {
-            publicarPaquete(pkt, rssi);
+            publicarPaquete(pkt);
           } else {
             debugPrint("[MQTT] sin conexion — paquete descartado");
           }
         }
       }
     } else {
-      debugPrintf("[LoRa] readData error: %d\n", state);
+      debugPrintf("[LoRa] readData error: %d\n", st);
     }
 
-    // Volver a modo escucha para el siguiente paquete
-    radio.startReceive();
+    radio.startReceive();   // volver a escucha continua
   }
 
   // ── Heartbeat cada 30 s ───────────────────────────────────────────────────
@@ -446,13 +389,13 @@ void loop() {
     if (mqtt.connected()) publicarHeartbeat();
   }
 
-  // ── Actualizar pantalla cada 2 s ──────────────────────────────────────────
-  if (ahora - tDisplay > 2000) {
+  // ── Pantalla cada 2 s ─────────────────────────────────────────────────────
+  if (ahora - tDisplay > 2000UL) {
     tDisplay = ahora;
-    dispInfo.wifiOk      = (WiFi.status() == WL_CONNECTED);
-    dispInfo.mqttOk      = mqtt.connected();
-    dispInfo.loraOk      = _loraOk;
-    dispInfo.collaresVivos = (uint8_t)contarCollaresVivos();
+    dispInfo.wifiOk       = (WiFi.status() == WL_CONNECTED);
+    dispInfo.mqttOk       = mqtt.connected();
+    dispInfo.loraOk       = _loraOk;
+    dispInfo.collaresVivos = (uint8_t)collaresVivos();
     gwDisplayUpdate(dispInfo);
   }
 }

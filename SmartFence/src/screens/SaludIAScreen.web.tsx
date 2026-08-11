@@ -6,7 +6,7 @@ import {
 import {
   Brain, ThermometerSun, Activity, Utensils,
   TrendingUp, AlertTriangle,
-  CheckCircle2, ChevronRight, RefreshCw,
+  CheckCircle2, ChevronRight,
   Droplets, Footprints, HeartPulse, MapPin,
   Heart, Plus, Bell,
 } from "lucide-react-native";
@@ -899,17 +899,11 @@ export default function SaludIAScreen() {
   const { width } = useWindowDimensions();
   const isSm = width < 768;
 
-  const [metricas, setMetricas] = useState<MetricaAnimal[]>(() => ANIMALES_DEMO.map(gen));
-  const [selId, setSelId]       = useState(metricas[0].id);
-  const [filtro, setFiltro]     = useState<DiagIA | "todos">("todos");
-  const [cargando, setCargando] = useState(false);
+  const [metricas] = useState<MetricaAnimal[]>(() => ANIMALES_DEMO.map(gen));
+  const [selId, setSelId] = useState(() => ANIMALES_DEMO[0].id);
+  const [filtro, setFiltro] = useState<DiagIA | "todos">("todos");
 
   const animal = metricas.find((m) => m.id === selId) ?? metricas[0];
-
-  function refrescar() {
-    setCargando(true);
-    setTimeout(() => { setMetricas(ANIMALES_DEMO.map(gen)); setCargando(false); }, 900);
-  }
 
   const lista = filtro === "todos" ? metricas : metricas.filter((m) => m.diag === filtro);
 
@@ -918,16 +912,6 @@ export default function SaludIAScreen() {
   const criticos = metricas.filter((m) => m.diag === "critico").length;
   const avgIdx   = Math.round(metricas.reduce((s, m) => s + m.indice, 0) / metricas.length);
   const avgTemp  = (metricas.reduce((s, m) => s + m.tempActual, 0) / metricas.length).toFixed(1);
-
-  const topRight = (
-    <TouchableOpacity onPress={refrescar} activeOpacity={0.75}
-      style={[st.refreshBtn, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
-      <RefreshCw size={12} color={cargando ? T.verde : T.txtMain} strokeWidth={2} />
-      <Text style={[st.refreshTxt, { color: T.txtMain }]}>
-        {cargando ? "Analizando…" : "Actualizar"}
-      </Text>
-    </TouchableOpacity>
-  );
 
   // ── Filter tab helper ──
   const FILTROS: { key: DiagIA | "todos"; label: string; Icon: React.ComponentType<any>; color: (a: boolean) => string; bg: (a: boolean) => string }[] = [
@@ -968,7 +952,6 @@ export default function SaludIAScreen() {
         <WebTopBar
           titulo="Salud IA — Análisis conductual"
           sub="Temperatura · Movimiento · Alimentación · Patrón post-comida · Recuperación"
-          rightContent={topRight}
         />
 
         <View style={st.body}>
@@ -1088,10 +1071,6 @@ const st = StyleSheet.create({
 
   // Stats row
   statsRow:     { flexDirection: "row", gap: 8 },
-
-  // Refresh button
-  refreshBtn:   { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
-  refreshTxt:   { fontSize: 11, fontWeight: "600" },
 
   // Mobile pills
   smPill:       { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999, borderWidth: 1.5 },

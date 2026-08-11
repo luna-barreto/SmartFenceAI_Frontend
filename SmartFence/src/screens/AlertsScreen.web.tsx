@@ -30,6 +30,7 @@ import { useT } from "@context/ThemeContext";
 import WebSidebar from "@components/WebSidebar";
 import WebTopBar from "@components/WebTopBar";
 import { useDemoSim } from "@context/DemoSimContext";
+import { navigateTo } from "@navigation/navigationRef";
 import {
   tiempoRelativo,
   type AlertaDemo,
@@ -146,13 +147,46 @@ function AlertRow({
 }
 
 // ─── Dropdown ────────────────────────────────────────────────────────────────
-function Dropdown({ label, T }: { label: string; T: ReturnType<typeof useT> }) {
+function Dropdown({ label, opciones, onSelect, T }: {
+  label: string;
+  opciones?: string[];
+  onSelect?: (v: string) => void;
+  T: ReturnType<typeof useT>;
+}) {
+  const [open, setOpen] = useState(false);
+  const displayLabel = {
+    "critica": "Crítica", "advertencia": "Advertencia",
+    "informativa": "Informativa", "intruso": "Intruso",
+    "no_leida": "No leída", "resuelta": "Resuelta",
+  }[label] ?? label;
+
   return (
-    <TouchableOpacity activeOpacity={0.75}
-      style={[st.dropdown, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
-      <Text style={[st.dropdownTxt, { color: T.txtMain }]}>{label}</Text>
-      <ChevronDown size={14} color={T.txtTer} strokeWidth={1.8} />
-    </TouchableOpacity>
+    <View>
+      <TouchableOpacity activeOpacity={0.75}
+        onPress={() => opciones && setOpen((o) => !o)}
+        style={[st.dropdown, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+        <Text style={[st.dropdownTxt, { color: T.txtMain }]}>{displayLabel}</Text>
+        <ChevronDown size={14} color={T.txtTer} strokeWidth={1.8} />
+      </TouchableOpacity>
+      {open && opciones && (
+        <View style={[st.dropdownMenu, { backgroundColor: T.card, borderColor: T.borde }]}>
+          {opciones.map((op) => {
+            const opLabel = {
+              "critica": "Crítica", "advertencia": "Advertencia",
+              "informativa": "Informativa", "intruso": "Intruso",
+              "no_leida": "No leída", "resuelta": "Resuelta",
+            }[op] ?? op;
+            return (
+              <TouchableOpacity key={op} activeOpacity={0.75}
+                onPress={() => { onSelect?.(op); setOpen(false); }}
+                style={[st.dropdownItem, { borderBottomColor: T.borde }]}>
+                <Text style={[st.dropdownTxt, { color: op === label ? T.verde : T.txtMain }]}>{opLabel}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -185,6 +219,11 @@ function ScenarioLegend({ T }: { T: ReturnType<typeof useT> }) {
 export default function AlertsScreen() {
   const T = useT();
   const [tab, setTab] = useState("todas");
+  const [filtroTipo, setFiltroTipo] = useState("Todas");
+  const [filtroEstado, setFiltroEstado] = useState("Todas");
+  const [filtroPotrero, setFiltroPotrero] = useState("Todos");
+  const [filtroAnimal, setFiltroAnimal] = useState("");
+  const [filtrosActivos, setFiltrosActivos] = useState(false);
   const { alertas, stats, nuevasIds } = useDemoSim();
 
   const criticas     = stats.alertasCriticas;
@@ -194,15 +233,34 @@ export default function AlertsScreen() {
   const resueltas    = stats.resueltas;
   const noLeidas     = alertas.filter((a) => !a.leida).length;
 
+  function limpiarFiltros() {
+    setFiltroTipo("Todas"); setFiltroEstado("Todas");
+    setFiltroPotrero("Todos"); setFiltroAnimal("");
+    setFiltrosActivos(false); setTab("todas");
+  }
+
+  function aplicarFiltros() {
+    setFiltrosActivos(true);
+    if (filtroTipo === "critica" || filtroTipo === "intruso") setTab("criticas");
+    else if (filtroEstado === "no_leida") setTab("no_leidas");
+    else if (filtroEstado === "resuelta") setTab("resueltas");
+    else setTab("todas");
+  }
+
   const alertasFiltradas = alertas.filter((a) => {
     if (tab === "no_leidas") return !a.leida;
     if (tab === "resueltas") return a.resuelta;
     if (tab === "criticas")  return a.tipo === "critica" || a.tipo === "intruso";
     return true;
+  }).filter((a) => {
+    if (filtrosActivos && filtroTipo !== "Todas" && a.tipo !== filtroTipo) return false;
+    if (filtrosActivos && filtroAnimal && !a.sub.toLowerCase().includes(filtroAnimal.toLowerCase())) return false;
+    return true;
   });
 
   const topBarRight = (
     <TouchableOpacity activeOpacity={0.75}
+      onPress={() => navigateTo("Settings")}
       style={[st.configBtn, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
       <Settings size={14} color={T.txtMain} strokeWidth={1.8} />
       <Text style={[st.configTxt, { color: T.txtMain }]}>Configuración</Text>
@@ -264,9 +322,10 @@ export default function AlertsScreen() {
               })}
               <View style={{ flex: 1 }} />
               <TouchableOpacity activeOpacity={0.75}
-                style={[st.filtrarBtn, { backgroundColor: T.card, borderColor: T.borde }]}>
-                <SlidersHorizontal size={14} color={T.txtMain} strokeWidth={1.8} />
-                <Text style={[st.filtrarTxt, { color: T.txtMain }]}>Filtrar</Text>
+                onPress={() => filtrosActivos ? limpiarFiltros() : aplicarFiltros()}
+                style={[st.filtrarBtn, { backgroundColor: filtrosActivos ? T.verdeOscuro : T.card, borderColor: filtrosActivos ? T.verdeOscuro : T.borde }]}>
+                <SlidersHorizontal size={14} color={filtrosActivos ? "#fff" : T.txtMain} strokeWidth={1.8} />
+                <Text style={[st.filtrarTxt, { color: filtrosActivos ? "#fff" : T.txtMain }]}>{filtrosActivos ? "Limpiar" : "Filtrar"}</Text>
               </TouchableOpacity>
             </View>
 
@@ -289,8 +348,11 @@ export default function AlertsScreen() {
               ))}
 
               <TouchableOpacity activeOpacity={0.75}
+                onPress={() => setTab("todas")}
                 style={[st.loadMoreBtn, { backgroundColor: T.cardElevada, borderTopColor: T.borde }]}>
-                <Text style={[st.loadMoreTxt, { color: T.txtSec }]}>Cargar más</Text>
+                <Text style={[st.loadMoreTxt, { color: T.txtSec }]}>
+                  {tab === "todas" ? "Mostrando todas" : "Ver todas las alertas"}
+                </Text>
                 <ChevronDown size={14} color={T.txtSec} strokeWidth={1.8} />
               </TouchableOpacity>
             </View>
@@ -302,22 +364,42 @@ export default function AlertsScreen() {
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={st.rightPanelContent}>
                 <View style={st.filterHeader}>
                   <Text style={[st.filterTitle, { color: T.txtMain }]}>Filtros</Text>
-                  <TouchableOpacity activeOpacity={0.75}>
-                    <Text style={[st.filterClear, { color: T.verde }]}>Limpiar</Text>
+                  <TouchableOpacity activeOpacity={0.75} onPress={limpiarFiltros}>
+                    <Text style={[st.filterClear, { color: filtrosActivos ? T.rojo : T.verde }]}>Limpiar</Text>
                   </TouchableOpacity>
                 </View>
 
                 <Text style={[st.filterGroupLabel, { color: T.txtSec }]}>TIPO DE ALERTA</Text>
-                <Dropdown label="Todas" T={T} />
+                <Dropdown
+                  label={filtroTipo}
+                  opciones={["Todas", "critica", "advertencia", "informativa", "intruso"]}
+                  onSelect={setFiltroTipo}
+                  T={T}
+                />
                 <Text style={[st.filterGroupLabel, { color: T.txtSec }]}>ESTADO</Text>
-                <Dropdown label="Todas" T={T} />
+                <Dropdown
+                  label={filtroEstado}
+                  opciones={["Todas", "no_leida", "resuelta"]}
+                  onSelect={setFiltroEstado}
+                  T={T}
+                />
                 <Text style={[st.filterGroupLabel, { color: T.txtSec }]}>POTRERO</Text>
-                <Dropdown label="Todos" T={T} />
+                <Dropdown
+                  label={filtroPotrero}
+                  opciones={["Todos", "Potrero Norte", "Potrero Sur", "Potrero Este", "Potrero Oeste"]}
+                  onSelect={setFiltroPotrero}
+                  T={T}
+                />
                 <Text style={[st.filterGroupLabel, { color: T.txtSec }]}>ANIMAL</Text>
                 <View style={[st.searchBox, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
                   <Search size={14} color={T.txtTer} strokeWidth={1.8} />
-                  <TextInput placeholder="Buscar animal..." placeholderTextColor={T.txtTer}
-                    style={[st.searchInput, { color: T.txtMain }]} />
+                  <TextInput
+                    placeholder="Buscar animal..."
+                    placeholderTextColor={T.txtTer}
+                    value={filtroAnimal}
+                    onChangeText={setFiltroAnimal}
+                    style={[st.searchInput, { color: T.txtMain }] as any}
+                  />
                 </View>
                 <Text style={[st.filterGroupLabel, { color: T.txtSec }]}>RANGO DE FECHA</Text>
                 <TouchableOpacity activeOpacity={0.75} style={[st.datePill, { backgroundColor: T.verdeAlfa }]}>
@@ -325,7 +407,8 @@ export default function AlertsScreen() {
                   <Text style={[st.datePillTxt, { color: T.verde }]}>Hoy</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity activeOpacity={0.8} style={[st.applyBtn, { backgroundColor: T.verdeOscuro }]}>
+                <TouchableOpacity activeOpacity={0.8} onPress={aplicarFiltros}
+                  style={[st.applyBtn, { backgroundColor: T.verdeOscuro }]}>
                   <Filter size={15} color="#FFFFFF" strokeWidth={1.8} />
                   <Text style={st.applyBtnTxt}>Aplicar filtros</Text>
                 </TouchableOpacity>
@@ -400,8 +483,10 @@ const st = StyleSheet.create({
   filterTitle:  { fontSize: 15, fontWeight: "700" },
   filterClear:  { fontSize: 13, fontWeight: "600" },
   filterGroupLabel: { fontSize: 11, fontWeight: "700", marginBottom: 6, marginTop: 14, letterSpacing: 0.4 },
-  dropdown: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+  dropdown:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
   dropdownTxt:  { fontSize: 13 },
+  dropdownMenu: { borderRadius: 10, borderWidth: 1, marginTop: 4, overflow: "hidden" as any, zIndex: 10 },
+  dropdownItem: { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1 },
   searchBox:    { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, height: 36 },
   searchInput:  { flex: 1, fontSize: 12 },
   datePill:     { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: "flex-start" },

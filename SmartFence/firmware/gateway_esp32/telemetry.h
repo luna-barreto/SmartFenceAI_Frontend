@@ -16,33 +16,29 @@ enum CollarStatus : uint8_t {
   STATUS_LOW_BATTERY   = 0x05,
   STATUS_MOVING        = 0x06,
   STATUS_STOPPED       = 0x07,
-  STATUS_COLLAR_OFF    = 0x08,
 };
 
 #define FLAG_GPS_VALID     0x01
-#define FLAG_TENSION_OK    0x02
-#define FLAG_CONTACTO_PIEL 0x04
 #define FLAG_MOVING        0x08
 #define FLAG_LOW_BAT       0x10
 #define FLAG_FUERA_CERCA   0x20
 
 #pragma pack(push, 1)
 struct TelemetryPacket {
-  uint16_t collarId;
-  int32_t  latE6;
-  int32_t  lngE6;
-  uint16_t speedCmS;
-  uint8_t  battery;
-  uint8_t  satellites;
-  uint8_t  hdop10;
-  uint8_t  status;
-  uint8_t  flags;
-  uint32_t timestamp;
-  uint16_t crc;
+  uint16_t collarId;    // 2
+  int32_t  latE6;       // 4
+  int32_t  lngE6;       // 4
+  uint8_t  battery;     // 1
+  uint8_t  satellites;  // 1
+  uint8_t  hdop10;      // 1
+  uint8_t  status;      // 1
+  uint8_t  flags;       // 1
+  uint32_t timestamp;   // 4
+  uint16_t crc;         // 2
 };
 #pragma pack(pop)
 
-static const size_t PACKET_SIZE = sizeof(TelemetryPacket);
+static const size_t PACKET_SIZE = sizeof(TelemetryPacket);  // 21 bytes
 
 // Mapa de collares — se actualiza en tiempo real desde el backend via MQTT.
 // Topic: smartfence/gateway/collares

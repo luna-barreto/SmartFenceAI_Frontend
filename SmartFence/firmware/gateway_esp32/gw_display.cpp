@@ -61,6 +61,18 @@ void gwDisplayUpdate(const GwDisplayInfo& d) {
   _oled.setTextColor(SSD1306_WHITE);
   _oled.setTextSize(1);
 
+  // ── Modo portal WiFi — pantalla especial ──────────────────────────
+  if (d.modoPortal) {
+    _oled.setCursor(14, 0);  _oled.print("CONFIG WiFi");
+    _oled.drawFastHLine(0, 10, 128, SSD1306_WHITE);
+    _oled.setCursor(0, 14);  _oled.print("Conectate al WiFi:");
+    _oled.setCursor(0, 24);  _oled.print("SmartFence-Setup");
+    _oled.setCursor(0, 36);  _oled.print("Abre el navegador");
+    _oled.setCursor(0, 46);  _oled.print("http://192.168.4.1");
+    _oled.display();
+    return;
+  }
+
   // ── Fila 0: focos + total collares ────────────────────────────────
   foco(5,  5, 3, d.wifiOk, "W");
   foco(25, 5, 3, d.mqttOk, "M");
@@ -72,7 +84,6 @@ void gwDisplayUpdate(const GwDisplayInfo& d) {
 
   // ── Filas 14-44: último collar recibido ───────────────────────────
   if (d.ultimoNombre[0] != '\0') {
-    // nombre + serial en la misma línea si caben, si no solo nombre
     _oled.setCursor(0, 14);
     char linea[28];
     snprintf(linea, sizeof(linea), "%s (%s)", d.ultimoNombre, d.ultimoSerial);

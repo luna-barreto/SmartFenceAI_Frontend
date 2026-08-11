@@ -108,12 +108,42 @@ function StatCard({ icon: Icon, valor, label, sub, color, bg, sparkline, progres
 }
 
 // ─── Filter pill dropdown ─────────────────────────────────────────────────────
-function FilterPill({ label, T }: { label: string; T: ReturnType<typeof useT> }) {
+function FilterPill({ label, valor, opciones, onSelect, T }: {
+  label: string; valor: string; opciones: string[];
+  onSelect: (v: string) => void; T: ReturnType<typeof useT>;
+}) {
+  const [open, setOpen] = useState(false);
+  const activo = valor !== opciones[0];
   return (
-    <TouchableOpacity style={[st.pill, { backgroundColor: T.card, borderColor: T.borde }]} activeOpacity={0.75}>
-      <Text style={[st.pillTxt, { color: T.txtMain }]}>{label}</Text>
-      <ChevronDown size={13} color={T.txtTer} strokeWidth={2} />
-    </TouchableOpacity>
+    <View style={{ zIndex: open ? 20 : 1 }}>
+      <TouchableOpacity
+        style={[st.pill, {
+          backgroundColor: activo ? T.verdeOscuro : T.card,
+          borderColor: activo ? T.verdeOscuro : T.borde,
+        }]}
+        activeOpacity={0.75}
+        onPress={() => setOpen((o) => !o)}
+      >
+        <Text style={[st.pillTxt, { color: activo ? "#fff" : T.txtMain }]}>
+          {label}: {valor}
+        </Text>
+        <ChevronDown size={13} color={activo ? "#fff" : T.txtTer} strokeWidth={2} />
+      </TouchableOpacity>
+      {open && (
+        <View style={[st.pillMenu, { backgroundColor: T.card, borderColor: T.borde }]}>
+          {opciones.map((op) => (
+            <TouchableOpacity
+              key={op}
+              style={[st.pillMenuItem, { borderBottomColor: T.borde }]}
+              onPress={() => { onSelect(op); setOpen(false); }}
+              activeOpacity={0.75}
+            >
+              <Text style={[st.pillMenuTxt, { color: op === valor ? T.verde : T.txtMain }]}>{op}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -138,6 +168,14 @@ export default function AnimalsScreen() {
   const [pagina, setPagina] = useState(1);
   const [animalesLocales, setAnimalesLocales] = useState<AnimalDemo[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [animalDetalle, setAnimalDetalle] = useState<AnimalDemo | null>(null);
+  // Filtros
+  const [filtroEstado,    setFiltroEstado]    = useState("Todos");
+  const [filtroCategoria, setFiltroCategoria] = useState("Todas");
+  const [filtroPotrero,   setFiltroPotrero]   = useState("Todos");
+  const [filtroSalud,     setFiltroSalud]     = useState("Todos");
+  const [filtroGenero,    setFiltroGenero]    = useState("Todos");
+
   const { width } = useWindowDimensions();
   const isSm = width < SM;
   const isMd = width < MD;
@@ -152,13 +190,39 @@ export default function AnimalsScreen() {
   const fueraCount   = todosAnimales.filter((a) => !a.dentroDeCerca).length;
   const atencionCount = todosAnimales.filter((a) => a.salud.sensor !== "verde").length;
 
+  // Opciones de potrero únicas derivadas de los datos reales
+  const opcionesPotrero = useMemo(
+    () => ["Todos", ...Array.from(new Set(todosAnimales.map((a) => a.potrero))).sort()],
+    [todosAnimales]
+  );
+
+  function limpiarFiltros() {
+    setFiltroEstado("Todos"); setFiltroCategoria("Todas"); setFiltroPotrero("Todos");
+    setFiltroSalud("Todos"); setFiltroGenero("Todos"); setBusqueda(""); setPagina(1);
+  }
+
   const filtrados = useMemo(() => {
-    if (!busqueda) return todosAnimales;
-    const q = busqueda.toLowerCase();
-    return todosAnimales.filter((a) =>
-      `${a.displayNombre} ${a.identificacion} ${a.raza} ${a.potrero}`.toLowerCase().includes(q)
-    );
-  }, [busqueda, todosAnimales]);
+    let r = todosAnimales;
+    if (busqueda) {
+      const q = busqueda.toLowerCase();
+      r = r.filter((a) =>
+        `${a.displayNombre} ${a.identificacion} ${a.raza} ${a.potrero}`.toLowerCase().includes(q)
+      );
+    }
+    if (filtroEstado === "Dentro") r = r.filter((a) => a.dentroDeCerca);
+    if (filtroEstado === "Fuera")  r = r.filter((a) => !a.dentroDeCerca);
+    if (filtroCategoria !== "Todas") r = r.filter((a) => a.categoria === filtroCategoria);
+    if (filtroPotrero   !== "Todos") r = r.filter((a) => a.potrero   === filtroPotrero);
+    if (filtroSalud === "Excelente") r = r.filter((a) => a.salud.sensor === "verde");
+    if (filtroSalud === "Atención")  r = r.filter((a) => a.salud.sensor === "amarillo");
+    if (filtroSalud === "Crítico")   r = r.filter((a) => a.salud.sensor === "rojo");
+    if (filtroGenero === "♀ Hembra") r = r.filter((a) => a.genero === "♀");
+    if (filtroGenero === "♂ Macho")  r = r.filter((a) => a.genero === "♂");
+    return r;
+  }, [busqueda, todosAnimales, filtroEstado, filtroCategoria, filtroPotrero, filtroSalud, filtroGenero]);
+
+  const filtrosActivos = [filtroEstado !== "Todos", filtroCategoria !== "Todas",
+    filtroPotrero !== "Todos", filtroSalud !== "Todos", filtroGenero !== "Todos"].filter(Boolean).length;
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / ITEMS_PER_PAGE));
   const paginaActual = Math.min(pagina, totalPaginas);
@@ -213,13 +277,36 @@ export default function AnimalsScreen() {
                   style={[st.searchInput, { color: T.txtMain }]}
                 />
               </View>
-              {!isSm && <FilterPill label="Estado: Todos" T={T} />}
-              {!isSm && <FilterPill label="Categoría: Todas" T={T} />}
-              {!isSm && <FilterPill label="Potrero: Todos" T={T} />}
+              {!isSm && (
+                <FilterPill label="Estado" valor={filtroEstado}
+                  opciones={["Todos", "Dentro", "Fuera"]}
+                  onSelect={(v) => { setFiltroEstado(v); setPagina(1); }} T={T} />
+              )}
+              {!isSm && (
+                <FilterPill label="Categoría" valor={filtroCategoria}
+                  opciones={["Todas", "Vaca", "Toro", "Ternero"]}
+                  onSelect={(v) => { setFiltroCategoria(v); setPagina(1); }} T={T} />
+              )}
+              {!isSm && (
+                <FilterPill label="Potrero" valor={filtroPotrero}
+                  opciones={opcionesPotrero}
+                  onSelect={(v) => { setFiltroPotrero(v); setPagina(1); }} T={T} />
+              )}
               <View style={{ flex: 1 }} />
-              <TouchableOpacity style={[st.moreFiltersBtn, { backgroundColor: T.card, borderColor: T.borde }]} activeOpacity={0.75}>
-                <Filter size={14} color={T.txtMain} strokeWidth={1.8} />
-                {!isSm && <Text style={[st.moreFiltersTxt, { color: T.txtMain }]}>Más filtros</Text>}
+              <TouchableOpacity
+                style={[st.moreFiltersBtn, {
+                  backgroundColor: filtrosActivos > 0 ? T.rojoBg : T.card,
+                  borderColor: filtrosActivos > 0 ? T.rojo : T.borde,
+                }]}
+                activeOpacity={0.75}
+                onPress={limpiarFiltros}
+              >
+                <Filter size={14} color={filtrosActivos > 0 ? T.rojo : T.txtMain} strokeWidth={1.8} />
+                {!isSm && (
+                  <Text style={[st.moreFiltersTxt, { color: filtrosActivos > 0 ? T.rojo : T.txtMain }]}>
+                    {filtrosActivos > 0 ? `Limpiar (${filtrosActivos})` : "Más filtros"}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
 
@@ -232,7 +319,7 @@ export default function AnimalsScreen() {
                     <Text style={[st.emptyTxt, { color: T.txtSec }]}>No se encontraron animales.</Text>
                   </View>
                 ) : paginados.map((a) => (
-                  <AnimalCard key={a.id} animal={a} T={T} />
+                  <AnimalCard key={a.id} animal={a} T={T} onPress={() => setAnimalDetalle(a)} />
                 ))}
               </View>
             ) : (
@@ -256,7 +343,7 @@ export default function AnimalsScreen() {
                       <Text style={[st.emptyTxt, { color: T.txtSec }]}>No se encontraron animales.</Text>
                     </View>
                   ) : paginados.map((a, i) => (
-                    <AnimalRow key={a.id} animal={a} isLast={i === paginados.length - 1} T={T} />
+                    <AnimalRow key={a.id} animal={a} isLast={i === paginados.length - 1} T={T} onPress={() => setAnimalDetalle(a)} />
                   ))}
 
                   <TablePagination
@@ -278,7 +365,18 @@ export default function AnimalsScreen() {
             )}
           </ScrollView>
 
-          {!isSm && <RightPanel T={T} animales={todosAnimales} />}
+          {!isSm && (
+            <RightPanel
+              T={T} animales={todosAnimales}
+              filtroEstado={filtroEstado}    setFiltroEstado={(v) => { setFiltroEstado(v); setPagina(1); }}
+              filtroCategoria={filtroCategoria} setFiltroCategoria={(v) => { setFiltroCategoria(v); setPagina(1); }}
+              filtroPotrero={filtroPotrero}  setFiltroPotrero={(v) => { setFiltroPotrero(v); setPagina(1); }}
+              filtroSalud={filtroSalud}      setFiltroSalud={(v) => { setFiltroSalud(v); setPagina(1); }}
+              filtroGenero={filtroGenero}    setFiltroGenero={(v) => { setFiltroGenero(v); setPagina(1); }}
+              opcionesPotrero={opcionesPotrero}
+              onLimpiar={limpiarFiltros}
+            />
+          )}
         </View>
       </View>
 
@@ -291,12 +389,18 @@ export default function AnimalsScreen() {
         }}
         T={T}
       />
+
+      <AnimalDetailModal
+        animal={animalDetalle}
+        onClose={() => setAnimalDetalle(null)}
+        T={T}
+      />
     </View>
   );
 }
 
 // ─── Desktop table row ────────────────────────────────────────────────────────
-function AnimalRow({ animal, isLast, T }: { animal: AnimalDemo; isLast: boolean; T: ReturnType<typeof useT> }) {
+function AnimalRow({ animal, isLast, T, onPress }: { animal: AnimalDemo; isLast: boolean; T: ReturnType<typeof useT>; onPress: () => void }) {
   const dentroColor = animal.dentroDeCerca ? T.verde : T.rojo;
   const dentroBg    = animal.dentroDeCerca ? T.verdeAlfa : T.rojoBg;
   const batColor    = animal.bateria >= 60 ? T.verde : animal.bateria >= 30 ? T.naranja : T.rojo;
@@ -322,6 +426,7 @@ function AnimalRow({ animal, isLast, T }: { animal: AnimalDemo; isLast: boolean;
     <TouchableOpacity
       style={[st.row, { backgroundColor: T.card, borderBottomColor: T.borde }, isLast && { borderBottomWidth: 0 }]}
       activeOpacity={0.7}
+      onPress={onPress}
     >
       {/* Animal */}
       <View style={[st.cellAnimal, { flex: 2.2 }]}>
@@ -412,7 +517,7 @@ function AnimalRow({ animal, isLast, T }: { animal: AnimalDemo; isLast: boolean;
 }
 
 // ─── Mobile card ──────────────────────────────────────────────────────────────
-function AnimalCard({ animal, T }: { animal: AnimalDemo; T: ReturnType<typeof useT> }) {
+function AnimalCard({ animal, T, onPress }: { animal: AnimalDemo; T: ReturnType<typeof useT>; onPress: () => void }) {
   const dentroColor = animal.dentroDeCerca ? T.verde : T.rojo;
   const dentroBg    = animal.dentroDeCerca ? T.verdeAlfa : T.rojoBg;
   const batColor    = animal.bateria >= 60 ? T.verde : animal.bateria >= 30 ? T.naranja : T.rojo;
@@ -421,7 +526,7 @@ function AnimalCard({ animal, T }: { animal: AnimalDemo; T: ReturnType<typeof us
   const avatarBg    = animal.categoria === "Toro" ? T.naranjaBg : T.verdeLuz;
 
   return (
-    <TouchableOpacity style={[st.mCard, { backgroundColor: T.card, borderColor: T.borde }]} activeOpacity={0.75}>
+    <TouchableOpacity style={[st.mCard, { backgroundColor: T.card, borderColor: T.borde }]} activeOpacity={0.75} onPress={onPress}>
       {/* Top row */}
       <View style={st.mCardTop}>
         <View style={[st.avatar, { backgroundColor: avatarBg }]}>
@@ -526,22 +631,76 @@ function TablePagination({ pagina, totalPaginas, totalItems, itemsPerPage, onCam
 }
 
 // ─── Right panel ──────────────────────────────────────────────────────────────
-function RightPanel({ T, animales }: { T: ReturnType<typeof useT>; animales: AnimalDemo[] }) {
-  const potreros = [
-    { name: "Potrero Norte", count: animales.filter((a) => a.potrero === "Potrero Norte").length, color: T.verde   },
-    { name: "Potrero Sur",   count: animales.filter((a) => a.potrero === "Potrero Sur").length,   color: T.rojo    },
-    { name: "Potrero Este",  count: animales.filter((a) => a.potrero === "Potrero Este").length,  color: T.verde   },
-    { name: "Potrero Oeste", count: animales.filter((a) => a.potrero === "Potrero Oeste").length, color: T.naranja },
-  ];
+function RpDropdown({ label, valor, opciones, onSelect, T }: {
+  label: string; valor: string; opciones: string[];
+  onSelect: (v: string) => void; T: ReturnType<typeof useT>;
+}) {
+  const [open, setOpen] = useState(false);
+  const activo = valor !== opciones[0];
+  return (
+    <View style={st.rpFilter}>
+      <Text style={[st.rpFilterLabel, { color: T.txtSec }]}>{label}</Text>
+      <TouchableOpacity
+        style={[st.rpDropdown, {
+          backgroundColor: activo ? T.verdeAlfa : T.cardElevada,
+          borderColor: activo ? T.verde : T.borde,
+        }]}
+        activeOpacity={0.75}
+        onPress={() => setOpen((o) => !o)}
+      >
+        <Text style={[st.rpDropdownTxt, { color: activo ? T.verde : T.txtMain, fontWeight: activo ? "700" : "400" }]}>
+          {valor}
+        </Text>
+        <ChevronDown size={13} color={activo ? T.verde : T.txtTer} strokeWidth={2} />
+      </TouchableOpacity>
+      {open && (
+        <View style={[st.rpMenu, { backgroundColor: T.card, borderColor: T.borde }]}>
+          {opciones.map((op) => (
+            <TouchableOpacity
+              key={op}
+              style={[st.rpMenuItem, { borderBottomColor: T.borde }]}
+              onPress={() => { onSelect(op); setOpen(false); }}
+              activeOpacity={0.75}
+            >
+              <Text style={[st.rpMenuTxt, { color: op === valor ? T.verde : T.txtMain,
+                fontWeight: op === valor ? "700" : "400" }]}>{op}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 
-  const filters = [
-    { label: "Estado",        value: "Todos"  },
-    { label: "Categoría",     value: "Todas"  },
-    { label: "Potrero",       value: "Todos"  },
-    { label: "Rango de edad", value: "Todos"  },
-    { label: "Género",        value: "Todos"  },
-    { label: "Estado de salud", value: "Todos" },
-  ];
+function RightPanel({ T, animales,
+  filtroEstado,    setFiltroEstado,
+  filtroCategoria, setFiltroCategoria,
+  filtroPotrero,   setFiltroPotrero,
+  filtroSalud,     setFiltroSalud,
+  filtroGenero,    setFiltroGenero,
+  opcionesPotrero, onLimpiar,
+}: {
+  T: ReturnType<typeof useT>; animales: AnimalDemo[];
+  filtroEstado: string;    setFiltroEstado: (v: string) => void;
+  filtroCategoria: string; setFiltroCategoria: (v: string) => void;
+  filtroPotrero: string;   setFiltroPotrero: (v: string) => void;
+  filtroSalud: string;     setFiltroSalud: (v: string) => void;
+  filtroGenero: string;    setFiltroGenero: (v: string) => void;
+  opcionesPotrero: string[]; onLimpiar: () => void;
+}) {
+  // Resumen por potrero dinámico
+  const resumenPotreros = useMemo(() => {
+    const map = new Map<string, number>();
+    animales.forEach((a) => map.set(a.potrero, (map.get(a.potrero) ?? 0) + 1));
+    const COLORS = [T.verde, T.rojo, T.verde, T.naranja, T.azul];
+    return Array.from(map.entries()).map(([name, count], i) => ({
+      name, count, color: COLORS[i % COLORS.length],
+    }));
+  }, [animales, T]);
+
+  const hayFiltros = [filtroEstado !== "Todos", filtroCategoria !== "Todas",
+    filtroPotrero !== "Todos", filtroSalud !== "Todos", filtroGenero !== "Todos"]
+    .some(Boolean);
 
   return (
     <View style={[st.rightPanel, { backgroundColor: T.card, borderLeftColor: T.borde }]}>
@@ -550,35 +709,62 @@ function RightPanel({ T, animales }: { T: ReturnType<typeof useT>; animales: Ani
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Filter size={14} color={T.txtMain} strokeWidth={2} />
             <Text style={[st.rpTitle, { color: T.txtMain }]}>Filtros</Text>
+            {hayFiltros && (
+              <View style={[st.rpActiveBadge, { backgroundColor: T.verdeAlfa }]}>
+                <Text style={[{ fontSize: 9, fontWeight: "800", color: T.verde }]}>
+                  {[filtroEstado !== "Todos", filtroCategoria !== "Todas",
+                    filtroPotrero !== "Todos", filtroSalud !== "Todos", filtroGenero !== "Todos"]
+                    .filter(Boolean).length} activos
+                </Text>
+              </View>
+            )}
           </View>
-          <TouchableOpacity activeOpacity={0.75}>
-            <Text style={[st.rpClear, { color: T.verde }]}>Limpiar todo</Text>
+          <TouchableOpacity activeOpacity={0.75} onPress={onLimpiar}>
+            <Text style={[st.rpClear, { color: hayFiltros ? T.rojo : T.verde }]}>Limpiar todo</Text>
           </TouchableOpacity>
         </View>
 
-        {filters.map((f) => (
-          <View key={f.label} style={st.rpFilter}>
-            <Text style={[st.rpFilterLabel, { color: T.txtSec }]}>{f.label}</Text>
-            <TouchableOpacity style={[st.rpDropdown, { backgroundColor: T.cardElevada, borderColor: T.borde }]} activeOpacity={0.75}>
-              <Text style={[st.rpDropdownTxt, { color: T.txtMain }]}>{f.value}</Text>
-              <ChevronDown size={13} color={T.txtTer} strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
-        ))}
+        <RpDropdown label="Estado"         valor={filtroEstado}    T={T}
+          opciones={["Todos", "Dentro", "Fuera"]}
+          onSelect={setFiltroEstado} />
+        <RpDropdown label="Categoría"      valor={filtroCategoria} T={T}
+          opciones={["Todas", "Vaca", "Toro", "Ternero"]}
+          onSelect={setFiltroCategoria} />
+        <RpDropdown label="Potrero"        valor={filtroPotrero}   T={T}
+          opciones={opcionesPotrero}
+          onSelect={setFiltroPotrero} />
+        <RpDropdown label="Salud"          valor={filtroSalud}     T={T}
+          opciones={["Todos", "Excelente", "Atención", "Crítico"]}
+          onSelect={setFiltroSalud} />
+        <RpDropdown label="Género"         valor={filtroGenero}    T={T}
+          opciones={["Todos", "♀ Hembra", "♂ Macho"]}
+          onSelect={setFiltroGenero} />
 
-        <TouchableOpacity style={[st.applyBtn, { backgroundColor: T.verdeOscuro }]} activeOpacity={0.85}>
-          <Text style={st.applyBtnTxt}>Aplicar filtros</Text>
+        <TouchableOpacity
+          style={[st.applyBtn, { backgroundColor: hayFiltros ? T.verdeOscuro : T.cardElevada }]}
+          activeOpacity={0.85}
+          onPress={hayFiltros ? undefined : onLimpiar}
+        >
+          <Text style={[st.applyBtnTxt, { color: hayFiltros ? "#fff" : T.txtSec }]}>
+            {hayFiltros ? "Filtros aplicados ✓" : "Sin filtros activos"}
+          </Text>
         </TouchableOpacity>
 
         <View style={[st.rpDivider, { backgroundColor: T.borde }]} />
 
         <Text style={[st.rpSectionTitle, { color: T.txtMain }]}>Resumen por potrero</Text>
-        {potreros.map((p) => (
-          <View key={p.name} style={st.rpPotreroRow}>
-            <View style={[st.rpDot, { backgroundColor: p.color }]} />
-            <Text style={[st.rpPotreroName, { color: T.txtMain }]}>{p.name}</Text>
+        {resumenPotreros.map((p) => (
+          <TouchableOpacity
+            key={p.name}
+            style={st.rpPotreroRow}
+            activeOpacity={0.75}
+            onPress={() => setFiltroPotrero(p.name === filtroPotrero ? "Todos" : p.name)}
+          >
+            <View style={[st.rpDot, { backgroundColor: p.name === filtroPotrero ? T.verde : p.color }]} />
+            <Text style={[st.rpPotreroName, { color: p.name === filtroPotrero ? T.verde : T.txtMain,
+              fontWeight: p.name === filtroPotrero ? "700" : "400" }]}>{p.name}</Text>
             <Text style={[st.rpPotreroCount, { color: T.txtSec }]}>{p.count}</Text>
-          </View>
+          </TouchableOpacity>
         ))}
 
         <TouchableOpacity style={st.mapLink} activeOpacity={0.75} onPress={() => navigateTo("Map")}>
@@ -597,6 +783,8 @@ function AddAnimalModal({ visible, onClose, onRegistrar, T }: {
   onRegistrar: (animal: AnimalDemo) => void;
   T: ReturnType<typeof useT>;
 }) {
+  const { width: sw, height: sh } = useWindowDimensions();
+  const isSm = sw < 600;
   const [nombre,    setNombre]    = useState("");
   const [collar,    setCollar]    = useState("");
   const [categoria, setCategoria] = useState<"Vaca" | "Toro" | "Ternero">("Vaca");
@@ -653,10 +841,10 @@ function AddAnimalModal({ visible, onClose, onRegistrar, T }: {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <View style={mo.backdrop}>
-        <View style={[mo.dialog, { backgroundColor: T.card, borderColor: T.borde }]}>
+        <View style={[mo.dialog, { backgroundColor: T.card, borderColor: T.borde, width: Math.min(480, sw * 0.95), maxHeight: sh - 40, borderRadius: isSm ? 14 : 20 }]}>
 
           {/* Header */}
-          <View style={mo.header}>
+          <View style={[mo.header, isSm && { padding: 14, paddingBottom: 12, gap: 10 }]}>
             <View style={[mo.headerIcon, { backgroundColor: T.verdeLuz }]}>
               <Plus size={18} color={T.verde} strokeWidth={2.5} />
             </View>
@@ -670,6 +858,8 @@ function AddAnimalModal({ visible, onClose, onRegistrar, T }: {
           </View>
 
           <View style={[mo.divider, { backgroundColor: T.borde }]} />
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: Math.max(200, sh - 260) }}>
 
           {/* Nombre */}
           <View style={mo.field}>
@@ -763,11 +953,270 @@ function AddAnimalModal({ visible, onClose, onRegistrar, T }: {
               <Text style={mo.saveTxt}>Registrar animal</Text>
             </TouchableOpacity>
           </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>
   );
 }
+
+// ─── Animal detail modal ──────────────────────────────────────────────────────
+function AnimalDetailModal({ animal, onClose, T }: {
+  animal: AnimalDemo | null;
+  onClose: () => void;
+  T: ReturnType<typeof useT>;
+}) {
+  const { width: sw, height: sh } = useWindowDimensions();
+  const isSm = sw < 600;
+
+  if (!animal) return null;
+
+  const dentroColor  = animal.dentroDeCerca ? T.verde : T.rojo;
+  const dentroBg     = animal.dentroDeCerca ? T.verdeAlfa : T.rojoBg;
+  const batColor     = animal.bateria >= 60 ? T.verde : animal.bateria >= 30 ? T.naranja : T.rojo;
+  const señalColor   = animal.señal === "Excelente" ? T.verde : animal.señal === "Buena" ? T.naranja : T.rojo;
+  const saludColor: Record<string, string> = { verde: T.verde, amarillo: T.naranja, rojo: T.rojo };
+
+  const initials  = animal.displayNombre.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const avatarBg  = animal.categoria === "Toro" ? T.naranjaBg : T.verdeLuz;
+
+  const collarBadge = {
+    en_linea:     { label: "En línea",  color: T.verde,   bg: T.verdeAlfa },
+    bateria_baja: { label: "Bat. baja", color: T.naranja, bg: T.naranjaBg },
+    cortado:      { label: "Cortado",   color: T.rojo,    bg: T.rojoBg    },
+    retirado:     { label: "Retirado",  color: T.rojo,    bg: T.rojoBg    },
+    sin_señal:    { label: "Sin señal", color: T.azul,    bg: T.azulBg    },
+  }[animal.estadoCollar];
+
+  function DetailRow({ icon: Icon, label, value, valueColor }: {
+    icon: React.ComponentType<any>; label: string; value: string; valueColor?: string;
+  }) {
+    return (
+      <View style={dm.detailRow}>
+        <View style={[dm.detailIcon, { backgroundColor: T.cardElevada }]}>
+          <Icon size={13} color={T.txtSec} strokeWidth={1.8} />
+        </View>
+        <Text style={[dm.detailLabel, { color: T.txtSec }]}>{label}</Text>
+        <Text style={[dm.detailValue, { color: valueColor ?? T.txtMain }]} numberOfLines={1}>{value}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <Modal visible={!!animal} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={mo.backdrop}>
+        <View style={[dm.dialog, { backgroundColor: T.card, borderColor: T.borde, width: Math.min(540, sw * 0.95), maxHeight: sh - 40, borderRadius: isSm ? 14 : 20 }]}>
+
+          {/* ── Header ── */}
+          <View style={[dm.header, isSm && { padding: 14, paddingBottom: 12, gap: 10 }]}>
+            <View style={[st.avatar, { backgroundColor: avatarBg, width: isSm ? 42 : 52, height: isSm ? 42 : 52, borderRadius: isSm ? 21 : 26 }]}>
+              <Text style={[st.avatarTxt, { color: T.verdeOscuro, fontSize: isSm ? 13 : 16 }]}>{initials}</Text>
+            </View>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={[dm.name, { color: T.txtMain }]}>{animal.displayNombre}</Text>
+              <Text style={[dm.idTxt, { color: T.txtSec }]}>{animal.identificacion} · {animal.genero} · {animal.raza}</Text>
+              <View style={dm.headerBadges}>
+                <View style={[st.badge, { backgroundColor: dentroBg }]}>
+                  <Text style={[st.badgeTxt, { color: dentroColor }]}>{animal.dentroDeCerca ? "Dentro de la cerca" : "Fuera de la cerca"}</Text>
+                </View>
+                <View style={[st.badge, { backgroundColor: animal.categoria === "Toro" ? T.naranjaBg : T.verdeLuz }]}>
+                  <Text style={[st.badgeTxt, { color: animal.categoria === "Toro" ? T.naranja : T.verde }]}>{animal.categoria}</Text>
+                </View>
+              </View>
+            </View>
+            <TouchableOpacity style={[mo.closeBtn, { backgroundColor: T.cardElevada }]} onPress={onClose} activeOpacity={0.75}>
+              <X size={16} color={T.txtSec} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={[mo.divider, { backgroundColor: T.borde }]} />
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: Math.max(180, sh - 220) }}>
+            {/* ── Collar ── */}
+            <View style={dm.section}>
+              <Text style={[dm.sectionTitle, { color: T.txtSec }]}>COLLAR / DISPOSITIVO</Text>
+
+              <View style={[dm.collarBox, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+                <View style={dm.collarTop}>
+                  <View style={{ gap: 2, flex: 1 }}>
+                    <Text style={[dm.collarId, { color: T.txtMain }]}>{animal.collarId}</Text>
+                    <Text style={[dm.collarProtocol, { color: T.txtSec }]}>Protocolo LoRa</Text>
+                  </View>
+                  <View style={[st.badge, { backgroundColor: collarBadge.bg }]}>
+                    <Text style={[st.badgeTxt, { color: collarBadge.color }]}>{collarBadge.label}</Text>
+                  </View>
+                </View>
+
+                {/* Batería */}
+                <View style={dm.batRow}>
+                  <BatteryIcon pct={animal.bateria} color={batColor} />
+                  <Text style={[dm.batPct, { color: batColor }]}>{animal.bateria}%</Text>
+                  <View style={[dm.batBarBg, { backgroundColor: T.borde, flex: 1 }]}>
+                    <View style={[dm.batBarFill, { width: `${animal.bateria}%` as any, backgroundColor: batColor }]} />
+                  </View>
+                  <Text style={[dm.batLabel, { color: T.txtTer }]}>Batería</Text>
+                </View>
+
+                {/* Señal */}
+                <View style={dm.señalRow}>
+                  <SignalBars señal={animal.señal} color={señalColor} />
+                  <Text style={[dm.señalTxt, { color: señalColor }]}>{animal.señal}</Text>
+                  <Text style={[dm.señalLabel, { color: T.txtTer }]}>Señal LoRa</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ── Ubicación ── */}
+            <View style={dm.section}>
+              <Text style={[dm.sectionTitle, { color: T.txtSec }]}>UBICACIÓN</Text>
+              <View style={dm.grid}>
+                <View style={[dm.gridCell, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+                  <MapPin size={14} color={T.verde} strokeWidth={1.8} />
+                  <Text style={[dm.gridLabel, { color: T.txtTer }]}>Potrero</Text>
+                  <Text style={[dm.gridValue, { color: T.txtMain }]}>{animal.potrero}</Text>
+                </View>
+                <View style={[dm.gridCell, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+                  <MapPin size={14} color={T.azul} strokeWidth={1.8} />
+                  <Text style={[dm.gridLabel, { color: T.txtTer }]}>Coordenadas</Text>
+                  <Text style={[dm.gridValue, { color: T.txtMain }]}>
+                    {animal.ubicacion.lat.toFixed(5)}, {animal.ubicacion.lng.toFixed(5)}
+                  </Text>
+                </View>
+                <View style={[dm.gridCell, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+                  <HeartPulse size={14} color={T.txtSec} strokeWidth={1.8} />
+                  <Text style={[dm.gridLabel, { color: T.txtTer }]}>Última vez visto</Text>
+                  <Text style={[dm.gridValue, { color: T.txtMain }]}>{animal.ultimaVez}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ── Salud ── */}
+            <View style={dm.section}>
+              <Text style={[dm.sectionTitle, { color: T.txtSec }]}>SALUD</Text>
+              <View style={[dm.saludBox, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+                <View style={dm.saludTop}>
+                  <ColorDot r={animal.salud.r} g={animal.salud.g} b={animal.salud.b} size={14} />
+                  <Text style={[dm.saludLabel, { color: saludColor[animal.salud.sensor] }]}>{animal.salud.label}</Text>
+                  <View style={{ flex: 1 }} />
+                  <View style={[st.badge, {
+                    backgroundColor: animal.salud.sensor === "verde" ? T.verdeAlfa : animal.salud.sensor === "amarillo" ? T.naranjaBg : T.rojoBg,
+                  }]}>
+                    <Text style={[st.badgeTxt, { color: saludColor[animal.salud.sensor] }]}>Sensor mucosa</Text>
+                  </View>
+                </View>
+                <Text style={[dm.saludDesc, { color: T.txtSec }]}>{animal.salud.descripcion}</Text>
+                <View style={dm.saludRgb}>
+                  <Text style={[dm.rgbTxt, { color: T.txtTer }]}>
+                    RGB detectado: ({animal.salud.r}, {animal.salud.g}, {animal.salud.b})
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ── Info general ── */}
+            <View style={[dm.section, { paddingBottom: 4 }]}>
+              <Text style={[dm.sectionTitle, { color: T.txtSec }]}>INFORMACIÓN GENERAL</Text>
+              <View style={[dm.infoBox, { backgroundColor: T.cardElevada, borderColor: T.borde }]}>
+                <View style={dm.infoGrid}>
+                  {[
+                    { label: "Edad",    value: animal.edad         },
+                    { label: "Género",  value: `${animal.genero} ${animal.categoria}` },
+                    { label: "Raza",    value: animal.raza         },
+                    { label: "Peso",    value: animal.peso ? `${animal.peso} kg` : "Sin dato" },
+                  ].map((item) => (
+                    <View key={item.label} style={dm.infoItem}>
+                      <Text style={[dm.infoLabel, { color: T.txtTer }]}>{item.label}</Text>
+                      <Text style={[dm.infoValue, { color: T.txtMain }]}>{item.value}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={[mo.divider, { backgroundColor: T.borde, marginBottom: 0 }]} />
+
+          {/* ── Footer actions ── */}
+          <View style={[dm.footer, isSm && { flexWrap: "wrap" as any, padding: 12, paddingTop: 10, gap: 6 }]}>
+            <TouchableOpacity
+              style={[dm.footerBtn, { borderColor: T.borde, backgroundColor: T.card }, isSm && { flex: 1, justifyContent: "center" as any }]}
+              onPress={onClose}
+              activeOpacity={0.75}
+            >
+              <X size={14} color={T.txtSec} strokeWidth={2} />
+              <Text style={[dm.footerBtnTxt, { color: T.txtSec }]}>Cerrar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[dm.footerBtn, { borderColor: T.borde, backgroundColor: T.cardElevada }, isSm && { flex: 1, justifyContent: "center" as any }]}
+              onPress={() => { onClose(); navigateTo("Map"); }}
+              activeOpacity={0.75}
+            >
+              <Map size={14} color={T.txtMain} strokeWidth={1.8} />
+              <Text style={[dm.footerBtnTxt, { color: T.txtMain }]}>Ver en mapa</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[dm.footerBtn, { backgroundColor: T.verdeOscuro, borderColor: T.verdeOscuro }, isSm && { flex: 1, justifyContent: "center" as any }]}
+              activeOpacity={0.85}
+            >
+              <BarChart2 size={14} color="#fff" strokeWidth={1.8} />
+              <Text style={[dm.footerBtnTxt, { color: "#fff" }]}>Ver historial</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const dm = StyleSheet.create({
+  dialog:     { width: 540, maxWidth: "95%" as any, borderRadius: 20, borderWidth: 1, overflow: "hidden" as any },
+  header:     { flexDirection: "row", alignItems: "flex-start", gap: 14, padding: 20, paddingBottom: 16 },
+  name:       { fontSize: 18, fontWeight: "800" },
+  idTxt:      { fontSize: 12 },
+  headerBadges: { flexDirection: "row", gap: 6, marginTop: 4, flexWrap: "wrap" as any },
+  section:    { paddingHorizontal: 20, paddingTop: 16, gap: 8 },
+  sectionTitle: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
+  // Collar box
+  collarBox:  { borderRadius: 12, borderWidth: 1, padding: 14, gap: 10 },
+  collarTop:  { flexDirection: "row", alignItems: "center", gap: 10 },
+  collarId:   { fontSize: 15, fontWeight: "800" },
+  collarProtocol: { fontSize: 11 },
+  batRow:     { flexDirection: "row", alignItems: "center", gap: 8 },
+  batPct:     { fontSize: 13, fontWeight: "700", minWidth: 36 },
+  batBarBg:   { height: 6, borderRadius: 3, overflow: "hidden" as any },
+  batBarFill: { height: 6, borderRadius: 3 },
+  batLabel:   { fontSize: 11, minWidth: 44 },
+  señalRow:   { flexDirection: "row", alignItems: "center", gap: 8 },
+  señalTxt:   { fontSize: 13, fontWeight: "700" },
+  señalLabel: { fontSize: 11 },
+  // Grid
+  grid:       { flexDirection: "row", gap: 8, flexWrap: "wrap" as any },
+  gridCell:   { flex: 1, minWidth: 120, borderRadius: 10, borderWidth: 1, padding: 12, gap: 4 },
+  gridLabel:  { fontSize: 10, fontWeight: "600", marginTop: 4 },
+  gridValue:  { fontSize: 13, fontWeight: "700" },
+  // Salud
+  saludBox:   { borderRadius: 12, borderWidth: 1, padding: 14, gap: 8 },
+  saludTop:   { flexDirection: "row", alignItems: "center", gap: 8 },
+  saludLabel: { fontSize: 14, fontWeight: "800" },
+  saludDesc:  { fontSize: 12, lineHeight: 18 },
+  saludRgb:   { flexDirection: "row" },
+  rgbTxt:     { fontSize: 10 },
+  // Info general
+  infoBox:    { borderRadius: 12, borderWidth: 1, padding: 14 },
+  infoGrid:   { flexDirection: "row", flexWrap: "wrap" as any, gap: 0 },
+  infoItem:   { width: "50%" as any, paddingVertical: 6, paddingRight: 12, gap: 2 },
+  infoLabel:  { fontSize: 10, fontWeight: "600" },
+  infoValue:  { fontSize: 13, fontWeight: "700" },
+  // Detail row (unused, kept for future)
+  detailRow:  { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
+  detailIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  detailLabel:{ fontSize: 12, minWidth: 100 },
+  detailValue:{ fontSize: 12, fontWeight: "600", flex: 1, textAlign: "right" as any },
+  // Footer
+  footer:     { flexDirection: "row", gap: 8, padding: 16, justifyContent: "flex-end" },
+  footerBtn:  { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+  footerBtnTxt: { fontSize: 13, fontWeight: "600" },
+});
 
 const mo = StyleSheet.create({
   backdrop:   { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" },
@@ -875,20 +1324,29 @@ const st = StyleSheet.create({
   mActionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderWidth: 1, borderRadius: 8, paddingVertical: 8 },
   mActionTxt: { fontSize: 11, fontWeight: "600" },
 
+  // Filter pill dropdown menu
+  pillMenu:     { position: "absolute" as any, top: 40, left: 0, minWidth: 160, borderRadius: 10, borderWidth: 1, overflow: "hidden" as any, zIndex: 20 },
+  pillMenuItem: { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1 },
+  pillMenuTxt:  { fontSize: 13 },
+
   // Right panel
   rightPanel: { width: 255, borderLeftWidth: 1, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16 },
   rpHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
   rpTitle:  { fontSize: 14, fontWeight: "700" },
   rpClear:  { fontSize: 12, fontWeight: "600" },
-  rpFilter: { marginBottom: 12, gap: 5 },
+  rpActiveBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999 },
+  rpFilter: { marginBottom: 10, gap: 5 },
   rpFilterLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" as any },
   rpDropdown: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
   rpDropdownTxt: { fontSize: 13 },
+  rpMenu:    { borderRadius: 10, borderWidth: 1, marginTop: 4, overflow: "hidden" as any },
+  rpMenuItem:{ paddingHorizontal: 14, paddingVertical: 9, borderBottomWidth: 1 },
+  rpMenuTxt: { fontSize: 13 },
   applyBtn:    { borderRadius: 12, paddingVertical: 12, alignItems: "center", justifyContent: "center", marginTop: 4, marginBottom: 16 },
-  applyBtnTxt: { fontSize: 13, fontWeight: "700", color: "#fff" },
+  applyBtnTxt: { fontSize: 13, fontWeight: "700" },
   rpDivider:   { height: 1, marginBottom: 16 },
   rpSectionTitle: { fontSize: 12, fontWeight: "700", marginBottom: 10 },
-  rpPotreroRow:   { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  rpPotreroRow:   { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8, paddingVertical: 2 },
   rpDot:       { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
   rpPotreroName: { fontSize: 12, flex: 1 },
   rpPotreroCount: { fontSize: 12, fontWeight: "600" },
