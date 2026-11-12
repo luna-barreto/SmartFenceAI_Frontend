@@ -77,15 +77,14 @@ export const PALETA_OSCURO = {
 export type Paleta = typeof PALETA_CLARO;
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [tema, setTema] = useState<Tema>("claro");
+  const [tema, setTema] = useState<Tema>("oscuro");
 
   useEffect(() => {
     AsyncStorage.getItem(TEMA_KEY).then((v) => {
-      // Only restore if the user explicitly chose a theme (versioned key)
       if (v === "claro_v2" || v === "oscuro_v2") {
         setTema(v === "oscuro_v2" ? "oscuro" : "claro");
       }
-      // Any old value ("claro" / "oscuro" without _v2) is ignored → defaults to "claro"
+      // Any old value without _v2 is ignored → defaults to "oscuro"
     });
   }, []);
 
